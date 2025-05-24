@@ -1,0 +1,46 @@
+# Virtual Environments
+midi-venv/
+magenta-venv/
+venv/
+env/
+.venv/
+.env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Project outputs
+*.png
+*.jpg
+*.wav
+*.mp3
+*.mid
+*.midi
+chord_progression.png
+melody_three_harmonizations.png
+
+# Jupyter notebooks (optional)
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
