@@ -1,13 +1,37 @@
-miditoolkit
-matplotlib
+# !!!!!!!! UNTESTED !!!!!!!!!!!!
+
+# Core ML/Audio packages (pinned to working versions)
 numpy==1.21.6
 tensorflow==2.9.1
 scipy==1.7.3
 librosa==0.7.2
+
+# Magenta ecosystem (our main tools)
+magenta==2.1.4
+note-seq==0.0.3
+
+# MIDI handling (versions that work together after our compatibility fix)
+miditoolkit==1.0.1
+mido==1.2.6
+pretty-midi==0.2.9
+
+# Visualization and analysis
+matplotlib==3.5.2
 scikit-image==0.19.3
 PyWavelets==1.3.0
+
+# Audio processing
+soundfile==0.13.1
+resampy==0.3.1
+audioread==3.0.1
+
+# Supporting packages (may not be auto-installed)
 protobuf==3.19.6
 absl-py==1.2.0
 six==1.16.0
-magenta==2.1.4
-note-seq==0.0.3
+Pillow==9.2.0
+PyYAML==6.0.1
+
+# Optional but useful
+pandas==1.1.5
+tqdm==4.67.1

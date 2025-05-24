@@ -1,9 +1,4 @@
 """
-=============================================================================
-MIDI CHORD PROGRESSION ANALYZER WITH TIMING TOLERANCE
-=============================================================================
-
-OVERVIEW:
 This module analyzes MIDI files to detect chord progressions using advanced 
 bass-prioritized chord detection with timing tolerance for anticipatory playing.
 
@@ -45,7 +40,7 @@ TYPICAL OUTPUT EXAMPLES:
 - Complex: F → F → Em → Em  (mixed with melodic content)
 
 USAGE:
-    progression, segments = analyze_midi_with_timing_tolerance(
+    progression, segments = analyze_midi_chord_progression(
         'your_file.mid',
         segment_size=2,        # beats per segment (2 recommended)
         tolerance_beats=0.15   # timing tolerance (0.1-0.2 recommended)
@@ -91,7 +86,7 @@ def patched_mido_init(self, filename=None, file=None, type=1, ticks_per_beat=480
                       ticks_per_beat=ticks_per_beat, charset=charset, debug=debug, **kwargs)
 
 mido.MidiFile.__init__ = patched_mido_init
-print("✅ Mido compatibility patch applied")
+# print("✅ Mido compatibility patch applied")
 
 # Chord definitions - all 12 major and minor triads
 CHORD_DEFINITIONS = {
@@ -247,7 +242,7 @@ def identify_chord_with_early_notes(regular_notes, early_notes=None):
     
     return regular_chord, regular_confidence, False  # False = didn't use early notes
 
-def analyze_midi_with_timing_tolerance(midi_file_path, segment_size=2, tolerance_beats=0.15):
+def analyze_midi_chord_progression(midi_file_path, segment_size=2, tolerance_beats=0.15):
     """
     Analyze MIDI file with timing tolerance for anticipatory playing.
     """
@@ -341,7 +336,7 @@ def analyze_midi_with_timing_tolerance(midi_file_path, segment_size=2, tolerance
     
     # Create visualization
     create_tolerance_visualization(midi_file, segments, timing_adjustments, 
-                                 f"chord_analysis_tolerance.png")
+                                 f"chord_analysis_tolerance.png", midi_file_path)
     
     # Extract final progression
     chord_progression = [s['chord'] for s in segments if s['chord'] is not None]
@@ -354,6 +349,22 @@ def analyze_midi_with_timing_tolerance(midi_file_path, segment_size=2, tolerance
 
 def create_tolerance_visualization(midi_file, segments, timing_adjustments, output_file):
     """Create visualization highlighting timing tolerance adjustments"""
+    import os
+    
+    # Create output directory
+    output_dir = "generated_visualizations"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Get filename for title from the midi_file object
+    if hasattr(midi_file, 'filename') and midi_file.filename:
+        midi_filename = os.path.splitext(os.path.basename(midi_file.filename))[0]
+    else:
+        # Fallback: extract from output_file name
+        midi_filename = os.path.splitext(output_file)[0].replace('chord_analysis_tolerance', '').replace('_', '')
+    
+    # Update output file path to include directory
+    output_file = os.path.join(output_dir, output_file)
+    
     plt.figure(figsize=(14, 6))
     
     # Extract note data
@@ -385,11 +396,11 @@ def create_tolerance_visualization(midi_file, segments, timing_adjustments, outp
     # Highlight beats where timing tolerance was used
     for beat in timing_adjustments:
         plt.axvline(x=beat, color='red', linestyle='--', alpha=0.7, linewidth=1)
-        plt.text(beat, 45, '🎵', fontsize=8, ha='center')
+        plt.text(beat, 45, 'T', fontsize=8, ha='center')
     
     plt.xlabel('Time (beats)')
     plt.ylabel('MIDI Pitch')
-    plt.title('MIDI Analysis: Chord Detection with Timing Tolerance')
+    plt.title(f'Chord Analysis - {midi_filename} - Timing Tolerance')
     plt.grid(True, alpha=0.3)
     
     # Add legend
@@ -404,7 +415,7 @@ def main():
     midi_file_path = 'midi_samples/2 4ths.mid'
     
     print("=== CHORD DETECTION WITH TIMING TOLERANCE ===")
-    progression, segments = analyze_midi_with_timing_tolerance(
+    progression, segments = analyze_midi_chord_progression(
         midi_file_path, 
         segment_size=2, 
         tolerance_beats=0.15  # 0.15 beats = about 150ms at 100 BPM

@@ -1,19 +1,19 @@
-# works nicely
+"""
+Analyze a MIDI file to determine if it contains chord progressions or melody.
+
+Args:
+    midi_file: Path to MIDI file
+    
+Returns:
+    str: "chord_progression" or "melody"
+"""
 
 import mido
 import numpy as np
 from collections import defaultdict
 
 def detect_midi_type(midi_file):
-    """
-    Analyze a MIDI file to determine if it contains chord progressions or melody.
-    
-    Args:
-        midi_file: Path to MIDI file
-        
-    Returns:
-        str: "chord_progression" or "melody"
-    """
+
     try:
         # Load MIDI file
         midi_data = mido.MidiFile(midi_file)

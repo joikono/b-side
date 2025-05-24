@@ -1,9 +1,4 @@
 """
-=============================================================================
-MAGENTA ARRANGEMENT GENERATOR - 8-CHORD PROGRESSION SUPPORT
-=============================================================================
-
-OVERVIEW:
 Generates complete musical arrangements using Magenta AI models.
 Takes 8 chord roots (from 2-beat melody analysis) and creates
 bass lines and drum patterns.
@@ -12,7 +7,7 @@ KEY FEATURES:
 • 🎵 8-chord progression support (2-beat segments)
 • 🥁 AI-generated drum patterns
 • 🎸 AI-generated bass lines
-• 🎹 Configurable complexity and style parameters
+• Configurable complexity and style parameters
 • 📊 Complete MIDI arrangement output
 
 WORKFLOW:
@@ -21,7 +16,6 @@ WORKFLOW:
 3. Generate AI bass line and drum pattern
 4. Combine into complete arrangement
 5. Export as MIDI file
-=============================================================================
 """
 
 from magenta.models.melody_rnn import melody_rnn_sequence_generator  
@@ -118,7 +112,7 @@ def generate_arrangement_from_chords(
     
     # Convert chord names to MIDI notes
     chord_roots = [chord_name_to_midi_note(chord, octave=3) for chord in chord_progression]
-    print(f"🎹 Chord roots (MIDI): {chord_roots}")
+    print(f"Chord roots (MIDI): {chord_roots}")
     
     # Setup timing constants
     # Each chord is 2 beats (half measure) at 100 BPM
@@ -126,7 +120,7 @@ def generate_arrangement_from_chords(
     chord_duration = 2 * beat_s                            # 2 beats per chord
     total_duration = len(chord_progression) * chord_duration  # total arrangement duration
     
-    print(f"⏰ Total duration: {total_duration:.1f} seconds ({len(chord_progression)} chords × 2 beats each)")
+    print(f"Total duration: {total_duration:.1f} seconds ({len(chord_progression)} chords × 2 beats each)")
     
     # Create root sequence with chord progression
     seed = note_seq.NoteSequence()
@@ -275,8 +269,8 @@ def generate_arrangement_from_chords(
     # Set total duration and export
     combined.total_time = max(n.end_time for n in combined.notes)
     note_seq.sequence_proto_to_midi_file(combined, output_file)
-    print(f"✅ Generated arrangement saved to {output_file}")
-    print(f"🎶 Duration: {combined.total_time:.1f} seconds")
+    print(f"Generated arrangement saved to {output_file}")
+    print(f"Duration: {combined.total_time:.1f} seconds")
     
     return combined
 
@@ -296,15 +290,92 @@ def test_arrangement_generator():
         bpm=100,
         bass_complexity=2,
         drum_complexity=1,
-        hi_hat_divisions=5,
+        hi_hat_divisions=4,
         snare_beats=(2, 4),
         output_file='test_arrangement.mid',
         bass_rnn=bass_rnn,
         drum_rnn=drum_rnn
     )
     
-    print("✅ Test completed successfully!")
+    print("Test completed successfully!")
     return arrangement
+
+def generate_arrangement(chord_progression, bpm=100, bass_complexity=2, drum_complexity=1, 
+                        hi_hat_divisions=4, snare_beats=(2, 4), output_file='arrangement.mid'):
+    """
+    Generate a full arrangement from a chord progression.
+    Returns Path to generated MIDI file
+    """
+    from model_manager import get_models
+    
+    print(f"Generating arrangement for: {' → '.join(chord_progression)}")
+    print(f"Settings: BPM={bpm}, Bass={bass_complexity}, Drums={drum_complexity}")
+    
+    # Get pre-loaded models
+    bass_rnn, drum_rnn = get_models()
+    
+    # Use your existing generate_arrangement_from_chords function
+    arrangement = generate_arrangement_from_chords(
+        chord_progression=chord_progression,
+        bpm=bpm,
+        bass_complexity=bass_complexity,
+        drum_complexity=drum_complexity,
+        hi_hat_divisions=hi_hat_divisions,
+        snare_beats=snare_beats,
+        output_file=output_file,
+        bass_rnn=bass_rnn,
+        drum_rnn=drum_rnn
+    )
+    
+    print(f"Arrangement saved as: {output_file}")
+    return output_file
+
+def get_user_complexity_settings():
+    """Get complexity preferences from user."""
+    print("\nARRANGEMENT COMPLEXITY SETTINGS")
+    print("=" * 40)
+    
+    # Bass complexity
+    print("Bass Complexity:")
+    print("  1 = Simple (root notes)")
+    print("  2 = Medium (walking bass)")
+    print("  3 = Complex (jazz-style)")
+    while True:
+        try:
+            bass_complexity = int(input("Choose bass complexity (1-3): "))
+            if 1 <= bass_complexity <= 3:
+                break
+            print("Please enter 1, 2, or 3")
+        except ValueError:
+            print("Please enter a number")
+    
+    # Drum complexity
+    print("\nDrum Complexity:")
+    print("  1 = Simple (kick + snare)")
+    print("  2 = Medium (+ hi-hats)")
+    print("  3 = Complex (fills + variations)")
+    while True:
+        try:
+            drum_complexity = int(input("Choose drum complexity (1-3): "))
+            if 1 <= drum_complexity <= 3:
+                break
+            print("Please enter 1, 2, or 3")
+        except ValueError:
+            print("Please enter a number")
+    
+    # BPM
+    while True:
+        try:
+            bpm = 100 # int(input(f"\nBPM (default 100): ") or "100")
+            if 60 <= bpm <= 200:
+                break
+            print("Please enter BPM between 60-200")
+        except ValueError:
+            print("Please enter a number")
+    
+    return bass_complexity, drum_complexity, bpm
+
+
 
 if __name__ == "__main__":
     # Run test

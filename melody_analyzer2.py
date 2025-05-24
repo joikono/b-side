@@ -1,11 +1,6 @@
 # also includes folk, just that
 
 """
-=============================================================================
-MELODY TO CHORD PROGRESSION INFERENCE - FOUR FOCUSED OPTIONS
-=============================================================================
-
-OVERVIEW:
 This module analyzes melodic MIDI files to suggest FOUR different chord progression
 options, focusing on practical harmonization approaches.
 
@@ -29,13 +24,13 @@ multiple valid interpretations to inspire musicians and show harmonic alternativ
 FOUNDATION APPROACHES:
 • Bass Foundation: Analyzes the tonal center and key (e.g., G-G-G-G for G major)
 • Phrase Foundation: Captures melodic phrase beginnings and transitions (e.g., C-C-C-C → D-D-D-D)
-=============================================================================
 """
 
 import miditoolkit
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import Counter, defaultdict
+import os
 
 # COMPATIBILITY FIX - Add this after your imports
 import mido
@@ -49,7 +44,7 @@ def patched_mido_init(self, filename=None, file=None, type=1, ticks_per_beat=480
                       ticks_per_beat=ticks_per_beat, charset=charset, debug=debug, **kwargs)
 
 mido.MidiFile.__init__ = patched_mido_init
-print("✅ Mido compatibility patch applied")
+# print("✅ Mido compatibility patch applied")
 
 # Krumhansl-Kessler key profiles for key detection
 MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
@@ -456,7 +451,7 @@ def create_phrase_foundation_progression(all_segments, chunk_size=4):
     
     return phrase_progression
 
-def analyze_melody_four_ways(midi_file, segment_size=2, tolerance_beats=0.15):
+def analyze_midi_melody(midi_file, segment_size=2, tolerance_beats=0.15):
     """
     Analyze a melodic MIDI file to suggest FOUR different chord progressions.
     """
@@ -576,6 +571,17 @@ def analyze_melody_four_ways(midi_file, segment_size=2, tolerance_beats=0.15):
 
 def create_four_way_visualization(midi_file, segments, bass_progression, phrase_progression, key, notes, output_file):
     """Create visualization showing all four harmonization options."""
+    
+    # Create output directory
+    output_dir = "generated_visualizations"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Get just the filename without path and extension for the title
+    midi_filename = os.path.splitext(os.path.basename(midi_file))[0]
+    
+    # Update output file path to include directory
+    output_file = os.path.join(output_dir, output_file)
+    
     plt.figure(figsize=(16, 12))
     
     # Plot melody
@@ -589,7 +595,7 @@ def create_four_way_visualization(midi_file, segments, bass_progression, phrase_
             plt.plot(note['start'], note['pitch'], 'ro', markersize=4, alpha=0.8)
     
     plt.ylabel('MIDI Pitch')
-    plt.title(f'Melody Analysis - Key: {key}')
+    plt.title(f'Melody Analysis - {midi_filename} - Key: {key}')
     plt.grid(True, alpha=0.3)
     
     # Plot Simple/Pop harmonization
@@ -660,14 +666,14 @@ def create_four_way_visualization(midi_file, segments, bass_progression, phrase_
     plt.xlabel('Time (beats)')
     plt.tight_layout()
     plt.savefig(output_file, dpi=150, bbox_inches='tight')
-    print(f"\n📊 Visualization saved as '{output_file}'")
+    print(f"\nVisualization saved as '{output_file}'")
 
 def main():
     # Example usage - replace with your melody MIDI file
     midi_file = "midi_samples/2 4ths.mid"  # Change this to your file
     
     print("=== MELODY TO CHORD PROGRESSION INFERENCE - FOUR OPTIONS ===")
-    key, progressions, confidences, segments = analyze_melody_four_ways(
+    key, progressions, confidences, segments = analyze_midi_melody(
         midi_file,
         segment_size=2,
         tolerance_beats=0.15
