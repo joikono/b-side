@@ -25,22 +25,37 @@ __pycache__/
 Thumbs.db
 Desktop.ini
 
-# Project outputs
+# Generated content
+generated_arrangements/
+generated_visualizations/
 *.png
 *.jpg
 *.wav
 *.mp3
-*.mid
-*.midi
-chord_progression.png
-melody_three_harmonizations.png
+
+# FastAPI related
+.pytest_cache/
+htmlcov/
+.coverage
+.cache
+*.log
 
 # Jupyter notebooks (optional)
 .ipynb_checkpoints/
 
-# Logs
-*.log
-
 # Temporary files
 *.tmp
 *.temp
+temp/
+
+# Large model files (already downloaded)
+*.mag
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Testing
+test_*.mid
+test_*.midi

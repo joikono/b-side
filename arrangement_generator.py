@@ -272,7 +272,7 @@ def generate_arrangement_from_chords(
     print(f"Generated arrangement saved to {output_file}")
     print(f"Duration: {combined.total_time:.1f} seconds")
     
-    return combined
+    return output_file # combined
 
 def test_arrangement_generator():
     """Test the arrangement generator with a sample chord progression."""

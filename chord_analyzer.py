@@ -66,7 +66,6 @@ AUTHOR NOTES:
 Designed for real-world MIDI analysis where human timing isn't perfect.
 Prioritizes musical intuition (bass notes matter most) over mathematical precision.
 Handles both composed MIDI (exact timing) and performed MIDI (human timing variations).
-=============================================================================
 """
 
 import miditoolkit
@@ -336,7 +335,7 @@ def analyze_midi_chord_progression(midi_file_path, segment_size=2, tolerance_bea
     
     # Create visualization
     create_tolerance_visualization(midi_file, segments, timing_adjustments, 
-                                 f"chord_analysis_tolerance.png", midi_file_path)
+                                 f"chord_analysis_tolerance.png")
     
     # Extract final progression
     chord_progression = [s['chord'] for s in segments if s['chord'] is not None]
@@ -347,7 +346,7 @@ def analyze_midi_chord_progression(midi_file_path, segment_size=2, tolerance_bea
     
     return chord_progression, segments
 
-def create_tolerance_visualization(midi_file, segments, timing_adjustments, output_file):
+def create_tolerance_visualization(midi_file, segments, timing_adjustments, output_file, midi_file_path=None):
     """Create visualization highlighting timing tolerance adjustments"""
     import os
     
@@ -355,9 +354,9 @@ def create_tolerance_visualization(midi_file, segments, timing_adjustments, outp
     output_dir = "generated_visualizations"
     os.makedirs(output_dir, exist_ok=True)
     
-    # Get filename for title from the midi_file object
-    if hasattr(midi_file, 'filename') and midi_file.filename:
-        midi_filename = os.path.splitext(os.path.basename(midi_file.filename))[0]
+    # Get filename for title
+    if midi_file_path:
+        midi_filename = os.path.splitext(os.path.basename(midi_file_path))[0]
     else:
         # Fallback: extract from output_file name
         midi_filename = os.path.splitext(output_file)[0].replace('chord_analysis_tolerance', '').replace('_', '')
