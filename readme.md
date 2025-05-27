@@ -1,8 +1,6 @@
 pip install -r requirements.txt
 
-ola enomena, twra kanoume FastAPI integration. an kati gamithei kanoume revert apo git.
-
-
+revert to basic_rnn, put bass complexity = 1
 
 
 

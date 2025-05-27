@@ -1,8 +1,7 @@
 # model_manager.py - Handle model loading efficiently
 
 import os
-# from magenta.models.melody_rnn import melody_rnn_sequence_generator
-from magenta.models.improv_rnn import improv_rnn_sequence_generator
+from magenta.models.melody_rnn import melody_rnn_sequence_generator
 from magenta.models.drums_rnn import drums_rnn_sequence_generator
 from magenta.models.shared import sequence_generator_bundle
 from note_seq.notebook_utils import download_bundle
@@ -36,31 +35,26 @@ class MagentaModelManager:
         print("🔄 Loading Magenta models...")
         
         # Check if model files exist
-        bass_bundle_path = 'chord_pitches_improv.mag'
-        bass_bundle_path_old = 'basic_rnn.mag'
+        bass_bundle_path = 'basic_rnn.mag'
         drum_bundle_path = 'drum_kit_rnn.mag'
         
         if not os.path.exists(bass_bundle_path):
-            download_bundle('chord_pitches_improv.mag', '.')   
+            download_bundle('basic_rnn.mag', '.')   
         if not os.path.exists(drum_bundle_path):
             download_bundle('drum_kit_rnn.mag', '.')       
-        # if not os.path.exists(bass_bundle_path_old):
-        #     download_bundle('basic_rnn.mag', '.') 
 
         
         try:
             # Load bundles
             bass_bundle = sequence_generator_bundle.read_bundle_file(bass_bundle_path)
             drum_bundle = sequence_generator_bundle.read_bundle_file(drum_bundle_path)
-            # bass_bundle_old = sequence_generator_bundle.read_bundle_file(bass_bundle_path_old)
-
             
             # Initialize generators
-            bass_map = improv_rnn_sequence_generator.get_generator_map()
+            bass_map = melody_rnn_sequence_generator.get_generator_map()
             drum_map = drums_rnn_sequence_generator.get_generator_map()
             
             
-            self._bass_rnn = bass_map['chord_pitches_improv'](checkpoint=None, bundle=bass_bundle) # basic_rnn
+            self._bass_rnn = bass_map['basic_rnn'](checkpoint=None, bundle=bass_bundle) # basic_rnn
             self._drum_rnn = drum_map['drum_kit'](checkpoint=None, bundle=drum_bundle)
             
             # Initialize models (this is the slow part)

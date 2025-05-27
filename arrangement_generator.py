@@ -52,204 +52,16 @@ def chord_name_to_midi_note(chord_name, octave=3):
         print(f"Warning: Unknown chord '{chord_name}', using C")
         return 60  # Default to middle C
 
-# def generate_arrangement_from_chords(
-#     chord_progression,               # List of 8 chord names (e.g., ['C', 'G', 'Am', 'F', ...])
-#     bpm=100,                        # Fixed tempo for MVP
-#     bass_complexity=2,              # Temperature for bass generation
-#     drum_complexity=1,              # Temperature for drum generation
-#     hi_hat_divisions=5,             # Divisions per beat for hi-hat
-#     snare_beats=(2, 4),             # Which beats get snare hits
-#     output_file='generated_arrangement.mid',
-#     bass_rnn=None,                  # Pre-initialized bass generator
-#     drum_rnn=None                   # Pre-initialized drum generator
-# ):
-#     """
-#     Generate a complete arrangement from 8 chord names.
-#     Each chord represents a 2-beat segment (half measure at 100 BPM).
-#     """
-    
-#     # Initialize models if not provided
-#     if bass_rnn is None or drum_rnn is None:
-#         bass_rnn, drum_rnn = MagentaModelManager.initialize_models()
-    
-#     print(f"🎵 Generating arrangement from chord progression: {' → '.join(chord_progression)}")
-    
-#     # Convert chord names to MIDI notes
-#     chord_roots = [chord_name_to_midi_note(chord, octave=3) for chord in chord_progression]
-#     print(f"Chord roots (MIDI): {chord_roots}")
-    
-#     # Setup timing constants
-#     # Each chord is 2 beats (half measure) at 100 BPM
-#     beat_s = 60 / bpm                                      # seconds per beat
-#     chord_duration = 2 * beat_s                            # 2 beats per chord
-#     total_duration = len(chord_progression) * chord_duration  # total arrangement duration
-    
-#     print(f"Total duration: {total_duration:.1f} seconds ({len(chord_progression)} chords × 2 beats each)")
-    
-#     # Create root sequence with chord progression
-#     seed = note_seq.NoteSequence()
-#     seed.ticks_per_quarter = 220                           # standard quantization
-#     seed.tempos.add(qpm=bpm)                               # set tempo
-#     seed.time_signatures.add(
-#         numerator=4,
-#         denominator=4,
-#         time=0
-#     )
-    
-#     # Add chord roots (each lasting 2 beats)
-#     for i, pitch in enumerate(chord_roots):
-#         start = i * chord_duration
-#         end = (i + 1) * chord_duration
-#         seed.notes.add(
-#             pitch=pitch,
-#             velocity=100,
-#             start_time=start,
-#             end_time=end,
-#             is_drum=False
-#         )
-    
-#     # Create drum seed with basic pattern (2 beats = one chord duration)
-#     drum_seed = note_seq.NoteSequence()
-#     drum_seed.ticks_per_quarter = seed.ticks_per_quarter
-#     drum_seed.tempos.extend(seed.tempos)
-#     drum_seed.time_signatures.add(
-#         numerator=4,
-#         denominator=4,
-#         time=0
-#     )
-    
-#     # Create a 2-beat drum pattern that matches our chord duration
-#     for beat in range(2):  # 2 beats per chord
-#         beat_time = beat * beat_s
-        
-#         # Kick on beat 1
-#         if beat == 0:  # Kick on first beat of each chord
-#             drum_seed.notes.add(
-#                 pitch=36,            # Kick drum
-#                 velocity=100,
-#                 start_time=beat_time,
-#                 end_time=beat_time + 0.1,
-#                 is_drum=True
-#             )
-        
-#         # Snare on beat 2 (if it's in snare_beats)
-#         if beat + 1 in snare_beats and beat == 1:  # Beat 2 of the pattern
-#             drum_seed.notes.add(
-#                 pitch=38,            # Snare drum
-#                 velocity=100,
-#                 start_time=beat_time,
-#                 end_time=beat_time + 0.1,
-#                 is_drum=True
-#             )
-        
-#         # Hi-hat pattern with specified divisions
-#         for div in range(hi_hat_divisions):
-#             div_time = beat_time + (div * beat_s / hi_hat_divisions)
-#             velocity = 80 if div == 0 else 60  # Accent on the beat
-#             drum_seed.notes.add(
-#                 pitch=42,            # Closed hi-hat
-#                 velocity=velocity,
-#                 start_time=div_time,
-#                 end_time=div_time + 0.1,
-#                 is_drum=True
-#             )
-    
-#     # Get end times
-#     seed_end = max(n.end_time for n in seed.notes)
-#     drum_seed_end = max(n.end_time for n in drum_seed.notes)
-    
-#     # Create a shorter primer for bass generation (just the first chord)
-#     bass_primer = note_seq.NoteSequence()
-#     bass_primer.ticks_per_quarter = seed.ticks_per_quarter
-#     bass_primer.tempos.add().CopyFrom(seed.tempos[0])
-#     if seed.time_signatures:
-#         bass_primer.time_signatures.add().CopyFrom(seed.time_signatures[0])
-    
-#     # Add only the first chord as primer
-#     for note in seed.notes:
-#         if note.start_time < chord_duration:
-#             bass_primer.notes.add().CopyFrom(note)
-    
-#     # Define generation options for bass
-#     bass_opts = generator_pb2.GeneratorOptions()
-#     bass_opts.generate_sections.add(
-#         start_time=chord_duration,  # Start after first chord
-#         end_time=total_duration
-#     )
-#     bass_opts.args['temperature'].float_value = bass_complexity
-    
-#     # Define generation options for drums
-#     drum_opts = generator_pb2.GeneratorOptions()
-#     drum_opts.generate_sections.add(
-#         start_time=drum_seed_end,
-#         end_time=total_duration
-#     )
-#     drum_opts.args['temperature'].float_value = drum_complexity
-    
-#     # Generate bass and drums
-#     print("🎸 Generating AI bass line...")
-#     bass_seq = bass_rnn.generate(bass_primer, bass_opts)
-    
-#     print("🥁 Generating AI drum pattern...")
-#     drum_seq = drum_rnn.generate(drum_seed, drum_opts)
-    
-#     # Transpose bass down one octave
-#     for n in bass_seq.notes:
-#         n.pitch = max(0, n.pitch - 12)
-    
-#     # Combine everything into final sequence
-#     combined = note_seq.NoteSequence()
-#     combined.ticks_per_quarter = seed.ticks_per_quarter
-#     combined.tempos.extend(seed.tempos)
-#     combined.time_signatures.extend(seed.time_signatures)
-    
-#     # Add chord roots as bass notes
-#     for n in seed.notes:
-#         new_note = combined.notes.add()
-#         new_note.CopyFrom(n)
-#         new_note.instrument = 0      # Bass channel
-#         new_note.program = 33        # Electric Bass (finger)
-#         new_note.is_drum = False
-    
-#     # Add AI-generated bass notes
-#     for n in bass_seq.notes:
-#         # Skip primer notes that we already added from the seed
-#         if n.start_time < chord_duration:
-#             continue
-        
-#         new_note = combined.notes.add()
-#         new_note.CopyFrom(n)
-#         new_note.instrument = 0      # Bass channel
-#         new_note.program = 33        # Electric Bass (finger)
-#         new_note.is_drum = False
-    
-#     # Add drum notes
-#     for n in drum_seq.notes:
-#         new_note = combined.notes.add()
-#         new_note.CopyFrom(n)
-#         new_note.instrument = 9  # Drum channel (GM standard)
-#         new_note.is_drum = True
-    
-#     # Set total duration and export
-#     combined.total_time = max(n.end_time for n in combined.notes)
-#     note_seq.sequence_proto_to_midi_file(combined, output_file)
-#     print(f"Generated arrangement saved to {output_file}")
-#     print(f"Duration: {combined.total_time:.1f} seconds")
-
-    
-    # return output_file # combined
-
-
 def generate_arrangement_from_chords(
-    chord_progression,               
-    bpm=100,                        
-    bass_complexity=2,              
-    drum_complexity=1,              
-    hi_hat_divisions=5,             
-    snare_beats=(2, 4),             
+    chord_progression,               # List of 8 chord names (e.g., ['C', 'G', 'Am', 'F', ...])
+    bpm=100,                        # Fixed tempo for MVP
+    bass_complexity=2,              # Temperature for bass generation
+    drum_complexity=1,              # Temperature for drum generation
+    hi_hat_divisions=5,             # Divisions per beat for hi-hat
+    snare_beats=(2, 4),             # Which beats get snare hits
     output_file='generated_arrangement.mid',
-    bass_rnn=None,                  
-    drum_rnn=None                   
+    bass_rnn=None,                  # Pre-initialized bass generator
+    drum_rnn=None                   # Pre-initialized drum generator
 ):
     """
     Generate a complete arrangement from 8 chord names.
@@ -258,8 +70,7 @@ def generate_arrangement_from_chords(
     
     # Initialize models if not provided
     if bass_rnn is None or drum_rnn is None:
-        from model_manager import get_models
-        bass_rnn, drum_rnn = get_models()
+        bass_rnn, drum_rnn = MagentaModelManager.initialize_models()
     
     print(f"🎵 Generating arrangement from chord progression: {' → '.join(chord_progression)}")
     
@@ -268,16 +79,17 @@ def generate_arrangement_from_chords(
     print(f"Chord roots (MIDI): {chord_roots}")
     
     # Setup timing constants
-    beat_s = 60 / bpm                                      
-    chord_duration = 2 * beat_s                            
-    total_duration = len(chord_progression) * chord_duration  
+    # Each chord is 2 beats (half measure) at 100 BPM
+    beat_s = 60 / bpm                                      # seconds per beat
+    chord_duration = 2 * beat_s                            # 2 beats per chord
+    total_duration = len(chord_progression) * chord_duration  # total arrangement duration
     
     print(f"Total duration: {total_duration:.1f} seconds ({len(chord_progression)} chords × 2 beats each)")
     
     # Create root sequence with chord progression
     seed = note_seq.NoteSequence()
-    seed.ticks_per_quarter = 220                           
-    seed.tempos.add(qpm=bpm)                               
+    seed.ticks_per_quarter = 220                           # standard quantization
+    seed.tempos.add(qpm=bpm)                               # set tempo
     seed.time_signatures.add(
         numerator=4,
         denominator=4,
@@ -296,16 +108,7 @@ def generate_arrangement_from_chords(
             is_drum=False
         )
     
-    # Add chord annotations for chord_pitches_improv
-    for i, chord_name in enumerate(chord_progression):
-        start_time = i * chord_duration
-        seed.text_annotations.add(
-            text=chord_name,
-            time=start_time,
-            annotation_type=note_seq.NoteSequence.TextAnnotation.CHORD_SYMBOL
-        )
-    
-    # Create drum seed with basic pattern
+    # Create drum seed with basic pattern (2 beats = one chord duration)
     drum_seed = note_seq.NoteSequence()
     drum_seed.ticks_per_quarter = seed.ticks_per_quarter
     drum_seed.tempos.extend(seed.tempos)
@@ -315,36 +118,36 @@ def generate_arrangement_from_chords(
         time=0
     )
     
-    # Create a 2-beat drum pattern
-    for beat in range(2):  
+    # Create a 2-beat drum pattern that matches our chord duration
+    for beat in range(2):  # 2 beats per chord
         beat_time = beat * beat_s
         
         # Kick on beat 1
-        if beat == 0:  
+        if beat == 0:  # Kick on first beat of each chord
             drum_seed.notes.add(
-                pitch=36,            
+                pitch=36,            # Kick drum
                 velocity=100,
                 start_time=beat_time,
                 end_time=beat_time + 0.1,
                 is_drum=True
             )
         
-        # Snare on beat 2 
-        if beat + 1 in snare_beats and beat == 1:  
+        # Snare on beat 2 (if it's in snare_beats)
+        if beat + 1 in snare_beats and beat == 1:  # Beat 2 of the pattern
             drum_seed.notes.add(
-                pitch=38,            
+                pitch=38,            # Snare drum
                 velocity=100,
                 start_time=beat_time,
                 end_time=beat_time + 0.1,
                 is_drum=True
             )
         
-        # Hi-hat pattern
+        # Hi-hat pattern with specified divisions
         for div in range(hi_hat_divisions):
             div_time = beat_time + (div * beat_s / hi_hat_divisions)
-            velocity = 80 if div == 0 else 60  
+            velocity = 80 if div == 0 else 60  # Accent on the beat
             drum_seed.notes.add(
-                pitch=42,            
+                pitch=42,            # Closed hi-hat
                 velocity=velocity,
                 start_time=div_time,
                 end_time=div_time + 0.1,
@@ -352,33 +155,25 @@ def generate_arrangement_from_chords(
             )
     
     # Get end times
+    seed_end = max(n.end_time for n in seed.notes)
     drum_seed_end = max(n.end_time for n in drum_seed.notes)
     
-    # FIXED: Create a minimal primer for bass generation 
+    # Create a shorter primer for bass generation (just the first chord)
     bass_primer = note_seq.NoteSequence()
     bass_primer.ticks_per_quarter = seed.ticks_per_quarter
     bass_primer.tempos.add().CopyFrom(seed.tempos[0])
     if seed.time_signatures:
         bass_primer.time_signatures.add().CopyFrom(seed.time_signatures[0])
     
-    # Copy chord annotations to primer
-    for annotation in seed.text_annotations:
-        bass_primer.text_annotations.add().CopyFrom(annotation)
+    # Add only the first chord as primer
+    for note in seed.notes:
+        if note.start_time < chord_duration:
+            bass_primer.notes.add().CopyFrom(note)
     
-    # FIXED: Add a very short primer note (quarter of the first chord duration)
-    primer_duration = chord_duration * 0.25  # Just 0.3 seconds
-    bass_primer.notes.add(
-        pitch=chord_roots[0],
-        velocity=100,
-        start_time=0,
-        end_time=primer_duration,
-        is_drum=False
-    )
-    
-    # FIXED: Define generation options for bass - start after primer
+    # Define generation options for bass
     bass_opts = generator_pb2.GeneratorOptions()
     bass_opts.generate_sections.add(
-        start_time=primer_duration,  # Start after short primer
+        start_time=chord_duration,  # Start after first chord
         end_time=total_duration
     )
     bass_opts.args['temperature'].float_value = bass_complexity
@@ -392,7 +187,7 @@ def generate_arrangement_from_chords(
     drum_opts.args['temperature'].float_value = drum_complexity
     
     # Generate bass and drums
-    print("🎸 Generating chord-aware AI bass line...")
+    print("🎸 Generating AI bass line...")
     bass_seq = bass_rnn.generate(bass_primer, bass_opts)
     
     print("🥁 Generating AI drum pattern...")
@@ -408,31 +203,31 @@ def generate_arrangement_from_chords(
     combined.tempos.extend(seed.tempos)
     combined.time_signatures.extend(seed.time_signatures)
     
-    # Add chord roots as bass notes (full duration)
+    # Add chord roots as bass notes
     for n in seed.notes:
         new_note = combined.notes.add()
         new_note.CopyFrom(n)
-        new_note.instrument = 0      
-        new_note.program = 33        
+        new_note.instrument = 0      # Bass channel
+        new_note.program = 33        # Electric Bass (finger)
         new_note.is_drum = False
     
     # Add AI-generated bass notes
     for n in bass_seq.notes:
-        # Skip primer notes that overlap with our chord roots
-        if n.start_time < primer_duration:
+        # Skip primer notes that we already added from the seed
+        if n.start_time < chord_duration:
             continue
         
         new_note = combined.notes.add()
         new_note.CopyFrom(n)
-        new_note.instrument = 0      
-        new_note.program = 33        
+        new_note.instrument = 0      # Bass channel
+        new_note.program = 33        # Electric Bass (finger)
         new_note.is_drum = False
     
     # Add drum notes
     for n in drum_seq.notes:
         new_note = combined.notes.add()
         new_note.CopyFrom(n)
-        new_note.instrument = 9  
+        new_note.instrument = 9  # Drum channel (GM standard)
         new_note.is_drum = True
     
     # Set total duration and export
@@ -440,34 +235,11 @@ def generate_arrangement_from_chords(
     note_seq.sequence_proto_to_midi_file(combined, output_file)
     print(f"Generated arrangement saved to {output_file}")
     print(f"Duration: {combined.total_time:.1f} seconds")
-    
-    return output_file
 
-def test_arrangement_generator():
-    """Test the arrangement generator with a sample chord progression."""
-    print("=== TESTING MAGENTA ARRANGEMENT GENERATOR ===")
     
-    # Sample 8-chord progression (2-beat segments)
-    test_chords = ['C', 'C', 'G', 'G', 'Am', 'Am', 'F', 'F']
-    
-    # Initialize models once
-    bass_rnn, drum_rnn = MagentaModelManager.initialize_models()
-    
-    # Generate arrangement
-    arrangement = generate_arrangement_from_chords(
-        chord_progression=test_chords,
-        bpm=100,
-        bass_complexity=2,
-        drum_complexity=1,
-        hi_hat_divisions=4,
-        snare_beats=(2, 4),
-        output_file='test_arrangement.mid',
-        bass_rnn=bass_rnn,
-        drum_rnn=drum_rnn
-    )
-    
-    print("Test completed successfully!")
-    return arrangement
+    return output_file # combined
+
+# Fix for the timing issue in generate_arrangement_from_chords function
 
 def generate_arrangement(chord_progression, bpm=100, bass_complexity=2, drum_complexity=1, 
                         hi_hat_divisions=4, snare_beats=(2, 4), output_file='arrangement.mid'):
@@ -498,6 +270,32 @@ def generate_arrangement(chord_progression, bpm=100, bass_complexity=2, drum_com
     
     print(f"Arrangement saved as: {output_file}")
     return output_file
+
+def test_arrangement_generator():
+    """Test the arrangement generator with a sample chord progression."""
+    print("=== TESTING MAGENTA ARRANGEMENT GENERATOR ===")
+    
+    # Sample 8-chord progression (2-beat segments)
+    test_chords = ['C', 'C', 'G', 'G', 'Am', 'Am', 'F', 'F']
+    
+    # Initialize models once
+    bass_rnn, drum_rnn = MagentaModelManager.initialize_models()
+    
+    # Generate arrangement
+    arrangement = generate_arrangement_from_chords(
+        chord_progression=test_chords,
+        bpm=100,
+        bass_complexity=2,
+        drum_complexity=1,
+        hi_hat_divisions=4,
+        snare_beats=(2, 4),
+        output_file='test_arrangement.mid',
+        bass_rnn=bass_rnn,
+        drum_rnn=drum_rnn
+    )
+    
+    print("Test completed successfully!")
+    return arrangement
 
 def get_user_complexity_settings():
     """Get complexity preferences from user."""
