@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🎹 Live MIDI Analysis Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        button { padding: 10px 15px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .connect-btn { background: #4CAF50; color: white; }
+        .record-btn { background: #2196F3; color: white; }
+        .stop-btn { background: #f44336; color: white; }
+        .analyze-btn { background: #FF9800; color: white; }
+        .melody-btn { background: #9C27B0; color: white; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .status.ready { background: #e8f5e8; }
+        .status.recording { background: #fff3cd; }
+        .status.analyzing { background: #d1ecf1; }
+        .status.error { background: #f8d7da; }
+        select { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .results { margin-top: 20px; }
+        .chord-progression { font-family: monospace; font-size: 16px; background: #f5f5f5; padding: 10px; margin: 5px 0; }
+        .button-group { margin: 10px 0; }
+        .visualization { margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🎹 Live MIDI Analysis Demo</h1>
+    
+    <!-- Device Connection -->
+    <div class="section">
+        <h3>1. Connect MIDI Device</h3>
+        <select id="deviceSelect">
+            <option>Loading devices...</option>
+        </select>
+        <button class="connect-btn" onclick="connectDevice()">Connect Device</button>
+        <button onclick="loadDevices()">🔄 Refresh Devices</button>
+    </div>
+    
+    <!-- Capture Controls -->
+    <div class="section">
+        <h3>2. Record Your Melody</h3>
+        <label>
+            Capture Mode: 
+            <select id="captureMode">
+                <option value="time">Fixed Duration (9.6 seconds)</option>
+                <option value="silence">Until Silence (2 seconds)</option>
+                <option value="manual">Manual Stop</option>
+            </select>
+        </label>
+        <br>
+        <button class="record-btn" onclick="startCapture()">🎹 Start Recording</button>
+        <button class="stop-btn" onclick="stopCapture()">⏹️ Stop Recording</button>
+        <div id="captureStatus" class="status ready">Ready to record</div>
+    </div>
+    
+    <!-- Analysis Options -->
+    <div class="section">
+        <h3>3. Analysis Options</h3>
+        <label>
+            Harmonization Style: 
+            <select id="harmonyStyle">
+                <option value="simple_pop">Simple/Pop</option>
+                <option value="folk_acoustic">Folk/Acoustic</option>
+                <option value="bass_foundation">Bass Foundation</option>
+                <option value="phrase_foundation">Phrase Foundation</option>
+            </select>
+        </label>
+        <br>
+        <label>Bass Complexity: <input type="range" id="bassComplexity" min="1" max="3" value="1"> <span id="bassValue">1</span></label>
+        <br>
+        <label>Drum Complexity: <input type="range" id="drumComplexity" min="1" max="3" value="1"> <span id="drumValue">1</span></label>
+        <br>
+        
+        <div class="button-group">
+            <button class="melody-btn" onclick="analyzeMelodyOnly()">🎵 Analyze Melody Only</button>
+            <button class="analyze-btn" onclick="analyzeAndGenerate()">🎼 Full Analysis + Arrangement</button>
+        </div>
+        <div id="analysisStatus" class="status ready">Ready to analyze</div>
+    </div>
+    
+    <!-- Results -->
+    <div class="section results" id="results" style="display: none;">
+        <h3>4. Results</h3>
+        <div id="keyInfo"></div>
+        <div id="progressions"></div>
+        <div id="arrangementLink"></div>
+        <div id="visualizationLink" class="visualization"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        let captureInterval;
+        
+        // Load available MIDI devices
+        async function loadDevices() {
+            try {
+                const response = await fetch(`${API_BASE}/midi/devices`);
+                const devices = await response.json();
+                
+                const select = document.getElementById('deviceSelect');
+                select.innerHTML = '';
+                
+                if (devices.length === 0) {
+                    select.innerHTML = '<option>No MIDI devices found</option>';
+                } else {
+                    devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = `${device.id}: ${device.name}`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
+                document.getElementById('deviceSelect').innerHTML = '<option>Error loading devices</option>';
+            }
+        }
+        
+        // Connect to selected MIDI device
+        async function connectDevice() {
+            const deviceId = document.getElementById('deviceSelect').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/midi/connect/${deviceId}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateStatus('captureStatus', 'Connected! Ready to record', 'ready');
+                } else {
+                    updateStatus('captureStatus', 'Failed to connect', 'error');
+                }
+            } catch (error) {
+                console.error('Error connecting device:', error);
+                updateStatus('captureStatus', 'Connection error', 'error');
+            }
+        }
+        
+        // Start MIDI capture
+        async function startCapture() {
+            const mode = document.getElementById('captureMode').value;
+            const duration = mode === 'time' ? 9.6 : 30.0;
+            
+            try {
+                const response = await fetch(`${API_BASE}/midi/start-capture`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode, duration })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateStatus('captureStatus', '🎵 Recording... Play your melody!', 'recording');
+                    startStatusUpdates();
+                } else {
+                    updateStatus('captureStatus', 'Failed to start recording', 'error');
+                }
+            } catch (error) {
+                console.error('Error starting capture:', error);
+                updateStatus('captureStatus', 'Recording error', 'error');
+            }
+        }
+        
+        // Stop MIDI capture
+        async function stopCapture() {
+            try {
+                await fetch(`${API_BASE}/midi/stop-capture`, { method: 'POST' });
+                stopStatusUpdates();
+                updateStatus('captureStatus', '⏹️ Recording stopped', 'ready');
+            } catch (error) {
+                console.error('Error stopping capture:', error);
+            }
+        }
+        
+        // Analyze melody only (no arrangement)
+        async function analyzeMelodyOnly() {
+            const style = document.getElementById('harmonyStyle').value;
+            
+            updateStatus('analysisStatus', '🎵 Analyzing melody for chord progression...', 'analyzing');
+            
+            try {
+                // ✅ FIXED: Using correct endpoint and parameter format
+                const response = await fetch(`${API_BASE}/midi/analyze-melody-live`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        harmonization_style: style,
+                        bpm: 100
+                    })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateStatus('analysisStatus', '✅ Melody analysis complete!', 'ready');
+                    displayMelodyResults(result);
+                } else {
+                    updateStatus('analysisStatus', `❌ ${result.message}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error analyzing melody:', error);
+                updateStatus('analysisStatus', 'Melody analysis error', 'error');
+            }
+        }
+        
+        // Analyze and generate full arrangement
+        async function analyzeAndGenerate() {
+            const style = document.getElementById('harmonyStyle').value;
+            const bassComplexity = parseInt(document.getElementById('bassComplexity').value);
+            const drumComplexity = parseInt(document.getElementById('drumComplexity').value);
+            
+            updateStatus('analysisStatus', '🎵 Analyzing melody and generating arrangement...', 'analyzing');
+            
+            try {
+                // ✅ FIXED: Using correct endpoint name and parameter format
+                const response = await fetch(`${API_BASE}/midi/analyze-generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        harmonization_style: style,
+                        bpm: 100,
+                        bass_complexity: bassComplexity,
+                        drum_complexity: drumComplexity,
+                        hi_hat_divisions: 2
+                    })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateStatus('analysisStatus', '✅ Analysis and arrangement complete!', 'ready');
+                    displayFullResults(result);
+                } else {
+                    updateStatus('analysisStatus', `❌ ${result.message}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error analyzing and generating:', error);
+                updateStatus('analysisStatus', 'Analysis error', 'error');
+            }
+        }
+        
+        // Display melody-only analysis results
+        function displayMelodyResults(result) {
+            document.getElementById('results').style.display = 'block';
+            
+            // Key information
+            document.getElementById('keyInfo').innerHTML = 
+                `<strong>Detected Key:</strong> ${result.key} (confidence: ${result.key_confidence.toFixed(2)})`;
+            
+            // Chord progressions
+            let progressionsHtml = '<h4>Chord Progressions:</h4>';
+            Object.entries(result.all_harmonizations).forEach(([style, data]) => {
+                const isSelected = style === result.selected_harmonization.style;
+                const highlight = isSelected ? 'style="background: #ffffcc;"' : '';
+                progressionsHtml += `<div ${highlight}><strong>${style}${isSelected ? ' (Selected)' : ''}:</strong> 
+                    <div class="chord-progression">${data.progression.join(' → ')}</div>
+                    <small>Confidence: ${data.confidence.toFixed(1)}%</small></div>`;
+            });
+            document.getElementById('progressions').innerHTML = progressionsHtml;
+            
+            // Clear arrangement link
+            document.getElementById('arrangementLink').innerHTML = '<em>No arrangement generated (melody analysis only)</em>';
+            
+            // Visualization link
+            if (result.visualization && result.visualization.success) {
+                document.getElementById('visualizationLink').innerHTML = 
+                    `<strong>Visualization:</strong> <a href="${API_BASE}${result.visualization.download_url}" target="_blank">📊 View Chord Progression Chart</a>`;
+            } else {
+                document.getElementById('visualizationLink').innerHTML = '';
+            }
+        }
+        
+        // Display full analysis + arrangement results
+        function displayFullResults(result) {
+            document.getElementById('results').style.display = 'block';
+            
+            // Key information
+            document.getElementById('keyInfo').innerHTML = 
+                `<strong>Detected Key:</strong> ${result.key} (confidence: ${result.key_confidence.toFixed(2)})`;
+            
+            // Chord progressions
+            let progressionsHtml = '<h4>Chord Progressions:</h4>';
+            Object.entries(result.chord_progressions).forEach(([style, chords]) => {
+                progressionsHtml += `<div><strong>${style}:</strong> <div class="chord-progression">${chords.join(' → ')}</div></div>`;
+            });
+            document.getElementById('progressions').innerHTML = progressionsHtml;
+            
+            // Arrangement download link
+            if (result.arrangement_file) {
+                document.getElementById('arrangementLink').innerHTML = 
+                    `<strong>Generated Arrangement:</strong> <a href="${API_BASE}/download/${result.arrangement_file}" download>📥 Download MIDI (${result.arrangement_file})</a>`;
+            } else {
+                document.getElementById('arrangementLink').innerHTML = '<em>No arrangement file generated</em>';
+            }
+            
+            // Visualization link
+            if (result.visualization_file) {
+                document.getElementById('visualizationLink').innerHTML = 
+                    `<strong>Visualization:</strong> <a href="${API_BASE}${result.visualization_url}" target="_blank">📊 View Chord Progression Chart</a>`;
+            } else {
+                document.getElementById('visualizationLink').innerHTML = '';
+            }
+        }
+        
+        // Update status display
+        function updateStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `status ${type}`;
+        }
+        
+        // Start real-time status updates during recording
+        function startStatusUpdates() {
+            captureInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/midi/status`);
+                    const status = await response.json();
+                    
+                    if (status.is_capturing) {
+                        updateStatus('captureStatus', 
+                            `🎵 Recording... ${status.events_captured} events, ${status.capture_duration.toFixed(1)}s`, 
+                            'recording');
+                    } else {
+                        stopStatusUpdates();
+                        updateStatus('captureStatus', 
+                            `✅ Recording finished! ${status.events_captured} events captured`, 
+                            'ready');
+                    }
+                } catch (error) {
+                    stopStatusUpdates();
+                }
+            }, 500);
+        }
+        
+        // Stop status updates
+        function stopStatusUpdates() {
+            if (captureInterval) {
+                clearInterval(captureInterval);
+                captureInterval = null;
+            }
+        }
+        
+        // Update complexity display values
+        document.getElementById('bassComplexity').addEventListener('input', function(e) {
+            document.getElementById('bassValue').textContent = e.target.value;
+        });
+        
+        document.getElementById('drumComplexity').addEventListener('input', function(e) {
+            document.getElementById('drumValue').textContent = e.target.value;
+        });
+        
+        // Load devices on page load
+        loadDevices();
+    </script>
+</body>
+</html>

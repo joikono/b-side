@@ -1,0 +1,225 @@
+# try inserting this instead in main.py after creating a frontend with metronome and clear live capture
+
+# Updated analyze_live_midi - fix live capture to match pre-recorded quality
+
+@app.post("/midi/analyze-live", response_model=LiveAnalysisResult)
+async def analyze_live_midi(
+    harmonization_style: str = "simple_pop",
+    bpm: int = 100,
+    bass_complexity: int = 1,
+    drum_complexity: int = 1
+):
+    """Analyze live MIDI by making it match pre-recorded MIDI timing quality."""
+    try:
+        # Convert captured MIDI to NoteSequence
+        note_sequence = await asyncio.get_event_loop().run_in_executor(
+            executor, live_midi.convert_to_note_sequence
+        )
+        
+        if not note_sequence:
+            return LiveAnalysisResult(
+                success=False,
+                message="No MIDI data captured or no notes found"
+            )
+        
+        # Save as temporary MIDI file for analysis
+        with tempfile.NamedTemporaryFile(suffix='.mid', delete=False) as tmp_file:
+            temp_midi_path = tmp_file.name
+        
+        # Convert to MIDI file
+        note_seq.sequence_proto_to_midi_file(note_sequence, temp_midi_path)
+        
+        try:
+            # ✅ SMART PREPROCESSING: Make live capture match pre-recorded quality
+            def preprocess_live_midi_to_match_prerecorded(note_sequence, target_beats=16, bpm=100):
+                """
+                Preprocess live MIDI to have the same timing characteristics as pre-recorded MIDI.
+                Goal: Make it so analyze_midi_melody finds exactly 16 beats like with pre-recorded files.
+                """
+                beat_duration = 60 / bpm  # 0.6 seconds per beat at 100 BPM
+                target_duration = target_beats * beat_duration  # 9.6 seconds
+                max_beat_time = (target_beats - 0.1) * beat_duration  # 15.9 beats in seconds
+                
+                print(f"🎵 Preprocessing live MIDI to match pre-recorded quality:")
+                print(f"  - Original: {note_sequence.total_time:.2f}s, {len(note_sequence.notes)} notes")
+                print(f"  - Target: {target_duration:.2f}s, {target_beats} beats")
+                print(f"  - Max note end time: {max_beat_time:.2f}s (beat {max_beat_time/beat_duration:.1f})")
+                
+                if not note_sequence.notes:
+                    return note_sequence
+                
+                # ✅ STEP 1: Find the actual musical content boundaries
+                note_starts = [note.start_time for note in note_sequence.notes]
+                note_ends = [note.end_time for note in note_sequence.notes]
+                
+                actual_start = min(note_starts)
+                actual_end = max(note_ends)
+                actual_duration = actual_end - actual_start
+                
+                print(f"  - Actual music: {actual_start:.2f}s → {actual_end:.2f}s ({actual_duration:.2f}s)")
+                
+                # ✅ STEP 2: Remove silence/offset at the beginning
+                for note in note_sequence.notes:
+                    note.start_time -= actual_start
+                    note.end_time -= actual_start
+                
+                print(f"🔧 Removed {actual_start:.2f}s initial offset")
+                
+                # ✅ STEP 3: Scale to fit exactly within target duration
+                current_end = max(note.end_time for note in note_sequence.notes)
+                if current_end > target_duration:
+                    scale_factor = target_duration / current_end
+                    for note in note_sequence.notes:
+                        note.start_time *= scale_factor
+                        note.end_time *= scale_factor
+                    print(f"🔧 Scaled by {scale_factor:.3f} to fit within {target_duration:.2f}s")
+                
+                # ✅ STEP 4: CRITICAL - Clip ALL notes to exactly 16 beats
+                notes_to_keep = []
+                notes_clipped = 0
+                
+                for note in note_sequence.notes:
+                    # Only keep notes that START before the max beat time
+                    if note.start_time < max_beat_time:
+                        # Clip note end time to max beat time
+                        if note.end_time > max_beat_time:
+                            note.end_time = max_beat_time
+                            notes_clipped += 1
+                        notes_to_keep.append(note)
+                
+                print(f"🎯 Clipped {notes_clipped} notes to max beat {max_beat_time/beat_duration:.1f}")
+                print(f"🎯 Keeping {len(notes_to_keep)} notes within {target_beats} beats")
+                
+                # Replace notes with clipped ones
+                del note_sequence.notes[:]
+                for note in notes_to_keep:
+                    new_note = note_sequence.notes.add()
+                    new_note.CopyFrom(note)
+                
+                # ✅ STEP 5: Set exact total time
+                note_sequence.total_time = target_duration
+                
+                # ✅ STEP 6: Verify no note extends beyond target beats
+                if note_sequence.notes:
+                    max_note_end = max(note.end_time for note in note_sequence.notes)
+                    max_note_end_beat = max_note_end / beat_duration
+                    print(f"✅ Final verification: Max note ends at {max_note_end:.2f}s (beat {max_note_end_beat:.1f})")
+                    
+                    if max_note_end_beat >= target_beats:
+                        print(f"❌ ERROR: Note still extends beyond {target_beats} beats!")
+                    else:
+                        print(f"✅ SUCCESS: All notes within {target_beats} beats")
+                
+                print(f"✅ Final preprocessing: {target_duration:.2f}s, {len(note_sequence.notes)} notes")
+                return note_sequence
+            
+            # Apply smart preprocessing
+            note_sequence = preprocess_live_midi_to_match_prerecorded(note_sequence, target_beats=16, bpm=bpm)
+            
+            # Save the preprocessed MIDI
+            note_seq.sequence_proto_to_midi_file(note_sequence, temp_midi_path)
+            
+            # ✅ Use the PROVEN analyze_midi_melody with optimal parameters
+            segment_size = 2        # 2 beats per segment
+            tolerance_beats = 0.15  # Same as your successful pre-recorded test
+            
+            print(f"🎵 Running analyze_midi_melody with proven parameters:")
+            print(f"  - Segment size: {segment_size} beats")
+            print(f"  - Tolerance: {tolerance_beats} beats")
+            
+            # This should now work exactly like your pre-recorded test!
+            key, progressions, confidences, segments = await asyncio.get_event_loop().run_in_executor(
+                executor, 
+                analyze_midi_melody, 
+                temp_midi_path,
+                segment_size,
+                tolerance_beats
+            )
+            
+            # Extract the 4 progressions
+            simple_prog, folk_prog, bass_prog, phrase_prog = progressions
+            simple_conf, folk_conf, bass_conf, phrase_conf = confidences
+            
+            print(f"🔍 Analysis results:")
+            print(f"  - Segments detected: {len(segments) if segments else 0}")
+            print(f"  - Simple progression: {' → '.join(simple_prog)}")
+            
+            # ✅ Ensure exactly 8 chords (should not be needed now, but safety net)
+            def ensure_8_chords(progression):
+                if len(progression) == 8:
+                    return progression
+                elif len(progression) > 8:
+                    return progression[:8]
+                else:
+                    # Pad to 8
+                    while len(progression) < 8:
+                        progression.append(progression[-1] if progression else 'C')
+                    return progression
+            
+            simple_prog = ensure_8_chords(simple_prog)
+            folk_prog = ensure_8_chords(folk_prog)
+            bass_prog = ensure_8_chords(bass_prog)
+            phrase_prog = ensure_8_chords(phrase_prog)
+            
+            print(f"🎵 Final 8-chord progressions:")
+            print(f"  Simple: {' → '.join(simple_prog)}")
+            print(f"  Folk: {' → '.join(folk_prog)}")
+            print(f"  Bass: {' → '.join(bass_prog)}")
+            print(f"  Phrase: {' → '.join(phrase_prog)}")
+            
+            # Map to expected format
+            style_map = {
+                "simple_pop": simple_prog,
+                "folk_acoustic": folk_prog, 
+                "bass_foundation": bass_prog,
+                "phrase_foundation": phrase_prog
+            }
+            
+            selected_progression = style_map.get(harmonization_style, simple_prog)
+            
+            if not selected_progression:
+                return LiveAnalysisResult(
+                    success=False,
+                    message="No chord progression found for selected style"
+                )
+            
+            # Generate arrangement
+            timestamp = int(time.time())
+            arrangement_file = await asyncio.get_event_loop().run_in_executor(
+                executor, 
+                generate_arrangement_from_chords,
+                selected_progression,
+                bpm,
+                bass_complexity,
+                drum_complexity,
+                5,  # hi_hat_divisions
+                (2, 4),  # snare_beats
+                f"live_arrangement_{timestamp}.mid",
+                bass_rnn,
+                drum_rnn
+            )
+            
+            return LiveAnalysisResult(
+                success=True,
+                message="Live MIDI analysis and arrangement generation completed",
+                chord_progressions=style_map,
+                confidence_scores=[simple_conf, folk_conf, bass_conf, phrase_conf],
+                key=key,
+                key_confidence=max(confidences),
+                arrangement_file=arrangement_file
+            )
+            
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_midi_path):
+                os.unlink(temp_midi_path)
+                
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"❌ Live MIDI analysis error: {error_details}")
+        
+        return LiveAnalysisResult(
+            success=False,
+            message=f"Analysis failed: {str(e)}"
+        )
