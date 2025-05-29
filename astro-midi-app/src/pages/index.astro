@@ -1,0 +1,1056 @@
+---
+// MidiAnalysisDemo.astro
+// Server-side logic can go here if needed
+const title = "🎹 Live MIDI Analysis Demo";
+const apiBase = "http://localhost:8000";
+---
+
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+</head>
+<body>
+    <main>
+        <h1>{title}</h1>
+        
+        <!-- Device Connection Section -->
+        <section class="section">
+            <h3>1. Connect MIDI Device</h3>
+            <select id="deviceSelect">
+                <option>Loading devices...</option>
+            </select>
+            <button class="connect-btn" onclick="connectDevice()">Connect Device</button>
+            <button onclick="loadDevices()">🔄 Refresh Devices</button>
+        </section>
+        
+        <!-- Capture Controls Section -->
+        <section class="section">
+            <h3>2. Record Your Melody</h3>
+            <label>
+                Capture Mode: 
+                <select id="captureMode">
+                    <option value="time">Fixed Duration (9.6 seconds)</option>
+                    <option value="silence">Until Silence (2 seconds)</option>
+                    <option value="manual">Manual Stop</option>
+                </select>
+            </label>
+            <br>
+            <label>
+                Tempo (BPM): 
+                <input type="range" id="tempoBPM" min="60" max="180" value="120"> 
+                <span id="tempoValue">120</span>
+            </label>
+            <br>
+            <label>
+                <input type="checkbox" id="enableMetronome" checked> 
+                Enable Metronome
+            </label>
+            <br>
+            <div class="button-group">
+                <button class="record-btn" onclick="startCapture()">🎹 Start Recording</button>
+                <button class="stop-btn" onclick="stopCapture()">⏹️ Stop Recording</button>
+            </div>
+            <div id="captureStatus" class="status ready">Ready to record</div>
+            <div id="beatIndicator" class="beat-indicator">
+                <div class="beat-circle" id="beatCircle"></div>
+                <div class="beat-count" id="beatCount">Ready</div>
+            </div>
+        </section>
+        
+        <!-- Analysis Options Section -->
+        <section class="section">
+            <h3>3. Analysis Options</h3>
+            <label>
+                Harmonization Style: 
+                <select id="harmonyStyle">
+                    <option value="simple_pop">Simple/Pop</option>
+                    <option value="folk_acoustic">Folk/Acoustic</option>
+                    <option value="bass_foundation">Bass Foundation</option>
+                    <option value="phrase_foundation">Phrase Foundation</option>
+                </select>
+            </label>
+            <br>
+            <label>
+                Bass Complexity: 
+                <input type="range" id="bassComplexity" min="1" max="3" value="1"> 
+                <span id="bassValue">1</span>
+            </label>
+            <br>
+            <label>
+                Drum Complexity: 
+                <input type="range" id="drumComplexity" min="1" max="3" value="1"> 
+                <span id="drumValue">1</span>
+            </label>
+            <br>
+            
+            <div class="button-group">
+                <button class="melody-btn" onclick="analyzeMelodyOnly()">🎵 Analyze Melody Only</button>
+                <button class="analyze-btn" onclick="analyzeAndGenerate()">🎼 Full Analysis + Arrangement</button>
+            </div>
+            <div id="analysisStatus" class="status ready">Ready to analyze</div>
+        </section>
+        
+        <!-- Results Section -->
+        <section class="section results" id="results" style="display: none;">
+            <h3>4. Results</h3>
+            <div id="keyInfo"></div>
+            <div id="progressions"></div>
+            <div id="arrangementLink"></div>
+            <div id="visualizationLink" class="visualization"></div>
+        </section>
+    </main>
+</body>
+</html>
+
+<style>
+    /* Global Styles */
+    * {
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #fafafa;
+        line-height: 1.6;
+    }
+    
+    main {
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    h1 {
+        color: #2c3e50;
+        text-align: center;
+        margin-bottom: 30px;
+        font-size: 2.2rem;
+    }
+    
+    h3 {
+        color: #34495e;
+        margin-bottom: 15px;
+        border-bottom: 2px solid #ecf0f1;
+        padding-bottom: 8px;
+    }
+    
+    /* Section Styles */
+    .section {
+        margin: 25px 0;
+        padding: 20px;
+        border: 1px solid #e1e8ed;
+        border-radius: 12px;
+        background: #f8f9fa;
+        transition: box-shadow 0.3s ease;
+    }
+    
+    .section:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Button Styles */
+    button {
+        padding: 12px 18px;
+        margin: 5px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        font-size: 14px;
+    }
+    
+    button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    button:active {
+        transform: translateY(0);
+    }
+    
+    .connect-btn {
+        background: linear-gradient(45deg, #4CAF50, #45a049);
+        color: white;
+    }
+    
+    .record-btn {
+        background: linear-gradient(45deg, #2196F3, #1976D2);
+        color: white;
+    }
+    
+    .stop-btn {
+        background: linear-gradient(45deg, #f44336, #d32f2f);
+        color: white;
+    }
+    
+    .analyze-btn {
+        background: linear-gradient(45deg, #FF9800, #f57c00);
+        color: white;
+    }
+    
+    .melody-btn {
+        background: linear-gradient(45deg, #9C27B0, #7b1fa2);
+        color: white;
+    }
+    
+    /* Form Controls */
+    select, input[type="range"] {
+        padding: 10px;
+        margin: 8px 5px;
+        border: 2px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: border-color 0.3s ease;
+    }
+    
+    select:focus, input:focus {
+        outline: none;
+        border-color: #4CAF50;
+        box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+    }
+    
+    input[type="range"] {
+        -webkit-appearance: none;
+        height: 8px;
+        border-radius: 4px;
+        background: #ddd;
+        outline: none;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #4CAF50;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    input[type="range"]::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #4CAF50;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        border: none;
+    }
+    
+    label {
+        display: block;
+        margin: 10px 0;
+        font-weight: 500;
+        color: #555;
+    }
+    
+    /* Status Styles */
+    .status {
+        padding: 12px;
+        margin: 15px 0;
+        border-radius: 8px;
+        font-weight: 500;
+        border-left: 4px solid #ccc;
+        transition: all 0.3s ease;
+    }
+    
+    .status.ready {
+        background: linear-gradient(135deg, #e8f5e8, #f0f8f0);
+        border-left-color: #4CAF50;
+        color: #2e7d32;
+    }
+    
+    .status.recording {
+        background: linear-gradient(135deg, #fff3cd, #fdf6d8);
+        border-left-color: #ff9800;
+        color: #e65100;
+        animation: pulse 2s infinite;
+    }
+    
+    .status.analyzing {
+        background: linear-gradient(135deg, #d1ecf1, #e3f2fd);
+        border-left-color: #2196F3;
+        color: #0277bd;
+    }
+    
+    .status.error {
+        background: linear-gradient(135deg, #f8d7da, #fce4e6);
+        border-left-color: #f44336;
+        color: #c62828;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    
+    /* Results Styles */
+    .results {
+        background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+    }
+    
+    .chord-progression {
+        font-family: 'Courier New', monospace;
+        font-size: 16px;
+        background: #2c3e50;
+        color: #ecf0f1;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 8px;
+        border-left: 4px solid #3498db;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+    
+    .button-group {
+        margin: 15px 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .visualization {
+        margin: 15px 0;
+        padding: 15px;
+        background: #fff;
+        border-radius: 8px;
+        border: 1px solid #e1e8ed;
+    }
+    
+    /* Responsive Design */
+    @media (max-width: 600px) {
+        body {
+            padding: 10px;
+        }
+        
+        main {
+            padding: 20px;
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+        }
+        
+        .button-group {
+            flex-direction: column;
+        }
+        
+        button {
+            width: 100%;
+        }
+        
+        .chord-progression {
+            font-size: 14px;
+        }
+    }
+    
+    /* Accessibility */
+    @media (prefers-reduced-motion: reduce) {
+        * {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+    
+    /* Focus indicators for keyboard navigation */
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible {
+        outline: 3px solid #4CAF50;
+        outline-offset: 2px;
+    }
+    
+    /* Metronome Styles */
+    .beat-indicator {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 20px 0;
+        padding: 20px;
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-radius: 12px;
+        border: 2px solid #dee2e6;
+    }
+    
+    .beat-circle {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6c757d, #495057);
+        margin-bottom: 10px;
+        transition: all 0.1s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .beat-circle.active {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        transform: scale(1.1);
+        box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+    }
+    
+    .beat-circle.count-in {
+        background: linear-gradient(135deg, #ffc107, #fd7e14);
+        transform: scale(1.2);
+        box-shadow: 0 6px 20px rgba(255, 193, 7, 0.4);
+    }
+    
+    .beat-count {
+        font-size: 18px;
+        font-weight: bold;
+        color: #495057;
+        min-height: 22px;
+        text-align: center;
+    }
+    
+    .beat-count.count-in {
+        font-size: 24px;
+        color: #e67e22;
+        animation: pulse-count 0.6s ease-in-out;
+    }
+    
+    .beat-count.recording {
+        color: #28a745;
+    }
+    
+    @keyframes pulse-count {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(1); }
+    }
+    
+    /* Checkbox styling */
+    input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        margin-right: 8px;
+        cursor: pointer;
+    }
+</style>
+
+<script>
+    // API Configuration
+    const API_BASE = 'http://localhost:8000';
+    
+    // Global variables
+    let captureInterval;
+    let metronome;
+    let Tone; // Will be loaded dynamically
+    
+    // Metronome Class using Web Audio API
+    class Metronome {
+        constructor() {
+            this.isPlaying = false;
+            this.bpm = 120;
+            this.beatCount = 0;
+            this.isCountingIn = false;
+            this.countInBeat = 0;
+            this.recordingStarted = false;
+            this.audioContext = null;
+            this.intervalId = null;
+            this.nextNoteTime = 0;
+            this.lookahead = 25.0; // How frequently to call scheduling function (in milliseconds)
+            this.scheduleAheadTime = 0.1; // How far ahead to schedule audio (sec)
+        }
+        
+        async initAudio() {
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Resume context if suspended (required by some browsers)
+                if (this.audioContext.state === 'suspended') {
+                    await this.audioContext.resume();
+                }
+            }
+        }
+        
+        playClick(time, isCountIn) {
+            // Create oscillator
+            const osc = this.audioContext.createOscillator();
+            const envelope = this.audioContext.createGain();
+            
+            osc.connect(envelope);
+            envelope.connect(this.audioContext.destination);
+            
+            // Different frequencies for count-in vs recording
+            osc.frequency.value = isCountIn ? 800 : 400; // Higher pitch for count-in
+            
+            // Create click envelope
+            envelope.gain.setValueAtTime(0, time);
+            envelope.gain.linearRampToValueAtTime(0.3, time + 0.001);
+            envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+            
+            osc.start(time);
+            osc.stop(time + 0.1);
+        }
+        
+        nextNote() {
+            // Advance current note and time by a quarter note
+            const secondsPerBeat = 60.0 / this.bpm;
+            this.nextNoteTime += secondsPerBeat;
+            
+            if (this.isCountingIn) {
+                this.countInBeat++;
+                this.updateVisualIndicator(this.countInBeat, true);
+                
+                if (this.countInBeat >= 4) {
+                    this.isCountingIn = false;
+                    this.beatCount = 0;
+                    this.recordingStarted = true;
+                    // Trigger actual MIDI recording start
+                    setTimeout(() => this.startMIDIRecording(), 50);
+                }
+            } else {
+                this.beatCount++;
+                this.updateVisualIndicator(this.beatCount, false);
+            }
+        }
+        
+        scheduleNote() {
+            while (this.nextNoteTime < this.audioContext.currentTime + this.scheduleAheadTime) {
+                this.playClick(this.nextNoteTime, this.isCountingIn);
+                this.nextNote();
+            }
+        }
+        
+        scheduler() {
+            this.scheduleNote();
+            
+            if (this.isPlaying) {
+                this.intervalId = setTimeout(() => this.scheduler(), this.lookahead);
+            }
+        }
+        
+        async start(bpm, countIn = true) {
+            try {
+                await this.initAudio();
+                
+                this.bpm = bpm;
+                this.beatCount = 0;
+                this.countInBeat = 0;
+                this.isCountingIn = countIn;
+                this.recordingStarted = false;
+                this.isPlaying = true;
+                
+                // Start the scheduler
+                this.nextNoteTime = this.audioContext.currentTime;
+                this.scheduler();
+                
+                console.log(`🥁 Metronome started at ${bpm} BPM${countIn ? ' with count-in' : ''}`);
+            } catch (error) {
+                console.error('Error initializing metronome:', error);
+                throw error;
+            }
+        }
+        
+        updateVisualIndicator(beat, isCountIn) {
+            const beatCircle = document.getElementById('beatCircle');
+            const beatCount = document.getElementById('beatCount');
+            
+            if (!beatCircle || !beatCount) return;
+            
+            // Remove previous classes
+            beatCircle.classList.remove('active', 'count-in');
+            beatCount.classList.remove('count-in', 'recording');
+            
+            if (isCountIn) {
+                beatCircle.classList.add('count-in');
+                beatCount.classList.add('count-in');
+                beatCount.textContent = beat.toString();
+            } else {
+                beatCircle.classList.add('active');
+                beatCount.classList.add('recording');
+                beatCount.textContent = `Beat ${beat}`;
+            }
+            
+            // Remove visual feedback after a short delay
+            setTimeout(() => {
+                beatCircle.classList.remove('active', 'count-in');
+            }, 150);
+        }
+        
+        stop() {
+            if (this.isPlaying) {
+                this.isPlaying = false;
+                this.isCountingIn = false;
+                this.recordingStarted = false;
+                
+                if (this.intervalId) {
+                    clearTimeout(this.intervalId);
+                    this.intervalId = null;
+                }
+                
+                // Reset visual indicator
+                const beatCircle = document.getElementById('beatCircle');
+                const beatCount = document.getElementById('beatCount');
+                
+                if (beatCircle && beatCount) {
+                    beatCircle.classList.remove('active', 'count-in');
+                    beatCount.classList.remove('count-in', 'recording');
+                    beatCount.textContent = 'Ready';
+                }
+                
+                console.log('🥁 Metronome stopped');
+            }
+        }
+        
+        startMIDIRecording() {
+            // This will be called after count-in completes
+            console.log('🎵 Starting MIDI recording after count-in...');
+            this.actuallyStartMIDICapture();
+        }
+        
+        async actuallyStartMIDICapture() {
+            const captureModeSelect = document.getElementById('captureMode') as HTMLSelectElement;
+            if (!captureModeSelect) return;
+            
+            const mode = captureModeSelect.value;
+            const duration = mode === 'time' ? 9.6 : 30.0;
+            
+            try {
+                const response = await fetch(`${API_BASE}/midi/start-capture`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode, duration })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateStatus('captureStatus', '🎵 Recording MIDI... Play your melody!', 'recording');
+                    startStatusUpdates();
+                } else {
+                    updateStatus('captureStatus', `Failed to start recording: ${result.message}`, 'error');
+                    this.stop(); // Stop metronome on error
+                }
+            } catch (error) {
+                console.error('Error starting MIDI capture:', error);
+                updateStatus('captureStatus', 'Recording error - check server connection', 'error');
+                this.stop(); // Stop metronome on error
+            }
+        }
+    }
+    
+    // Initialize metronome
+    metronome = new Metronome();
+    
+    // MIDI Device Management
+    async function loadDevices() {
+        try {
+            const response = await fetch(`${API_BASE}/midi/devices`);
+            const devices = await response.json();
+            
+            const select = document.getElementById('deviceSelect');
+            if (!select) return;
+            
+            select.innerHTML = '';
+            
+            if (devices.length === 0) {
+                select.innerHTML = '<option>No MIDI devices found</option>';
+            } else {
+                devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.id;
+                    option.textContent = `${device.id}: ${device.name}`;
+                    select.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading devices:', error);
+            const select = document.getElementById('deviceSelect');
+            if (select) {
+                select.innerHTML = '<option>Error loading devices</option>';
+            }
+        }
+    }
+    
+    async function connectDevice() {
+        const deviceSelect = document.getElementById('deviceSelect') as HTMLSelectElement;
+        if (!deviceSelect) return;
+        
+        const deviceId = deviceSelect.value;
+        
+        if (!deviceId || deviceId.includes('No MIDI') || deviceId.includes('Error')) {
+            updateStatus('captureStatus', 'Please select a valid MIDI device', 'error');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${API_BASE}/midi/connect/${deviceId}`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                updateStatus('captureStatus', 'Connected! Ready to record', 'ready');
+            } else {
+                updateStatus('captureStatus', `Failed to connect: ${result.message || 'Unknown error'}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error connecting device:', error);
+            updateStatus('captureStatus', 'Connection error - check if server is running', 'error');
+        }
+    }
+    
+    // Recording Functions
+    async function startCapture() {
+        const enableMetronomeCheckbox = document.getElementById('enableMetronome') as HTMLInputElement;
+        const tempoBPMSlider = document.getElementById('tempoBPM') as HTMLInputElement;
+        
+        if (!enableMetronomeCheckbox || !tempoBPMSlider) return;
+        
+        const enableMetronome = enableMetronomeCheckbox.checked;
+        const tempo = parseInt(tempoBPMSlider.value);
+        
+        if (enableMetronome) {
+            // Start with metronome count-in
+            updateStatus('captureStatus', '🥁 Count-in starting... Get ready!', 'analyzing');
+            
+            try {
+                await metronome.start(tempo, true); // true = count-in enabled
+            } catch (error) {
+                console.error('Error starting metronome:', error);
+                updateStatus('captureStatus', 'Metronome error - starting recording without metronome', 'error');
+                // Fallback to direct recording
+                startDirectCapture();
+            }
+        } else {
+            // Start recording directly without metronome
+            startDirectCapture();
+        }
+    }
+    
+    async function startDirectCapture() {
+        const captureModeSelect = document.getElementById('captureMode') as HTMLSelectElement;
+        if (!captureModeSelect) return;
+        
+        const mode = captureModeSelect.value;
+        const duration = mode === 'time' ? 9.6 : 30.0;
+        
+        try {
+            const response = await fetch(`${API_BASE}/midi/start-capture`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode, duration })
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                updateStatus('captureStatus', '🎵 Recording... Play your melody!', 'recording');
+                startStatusUpdates();
+            } else {
+                updateStatus('captureStatus', `Failed to start recording: ${result.message}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error starting capture:', error);
+            updateStatus('captureStatus', 'Recording error - check server connection', 'error');
+        }
+    }
+    
+    async function stopCapture() {
+        try {
+            // Stop metronome first
+            if (metronome) {
+                metronome.stop();
+            }
+            
+            // Stop MIDI recording
+            await fetch(`${API_BASE}/midi/stop-capture`, { method: 'POST' });
+            stopStatusUpdates();
+            updateStatus('captureStatus', '⏹️ Recording stopped', 'ready');
+        } catch (error) {
+            console.error('Error stopping capture:', error);
+            updateStatus('captureStatus', 'Error stopping recording', 'error');
+        }
+    }
+    
+    // Analysis Functions
+    async function analyzeMelodyOnly() {
+        const harmonySelect = document.getElementById('harmonyStyle') as HTMLSelectElement;
+        if (!harmonySelect) return;
+        
+        const style = harmonySelect.value;
+        
+        updateStatus('analysisStatus', '🎵 Analyzing melody for chord progression...', 'analyzing');
+        
+        try {
+            const response = await fetch(`${API_BASE}/midi/analyze-melody-live`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    harmonization_style: style,
+                    bpm: 100
+                })
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                updateStatus('analysisStatus', '✅ Melody analysis complete!', 'ready');
+                displayMelodyResults(result);
+            } else {
+                updateStatus('analysisStatus', `❌ ${result.message}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error analyzing melody:', error);
+            updateStatus('analysisStatus', 'Melody analysis error - check server connection', 'error');
+        }
+    }
+    
+    async function analyzeAndGenerate() {
+        const harmonySelect = document.getElementById('harmonyStyle') as HTMLSelectElement;
+        const bassSlider = document.getElementById('bassComplexity') as HTMLInputElement;
+        const drumSlider = document.getElementById('drumComplexity') as HTMLInputElement;
+        
+        if (!harmonySelect || !bassSlider || !drumSlider) return;
+        
+        const style = harmonySelect.value;
+        const bassComplexity = parseInt(bassSlider.value);
+        const drumComplexity = parseInt(drumSlider.value);
+        
+        updateStatus('analysisStatus', '🎵 Analyzing melody and generating arrangement...', 'analyzing');
+        
+        try {
+            const response = await fetch(`${API_BASE}/midi/analyze-generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    harmonization_style: style,
+                    bpm: 100,
+                    bass_complexity: bassComplexity,
+                    drum_complexity: drumComplexity,
+                    hi_hat_divisions: 2
+                })
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                updateStatus('analysisStatus', '✅ Analysis and arrangement complete!', 'ready');
+                displayFullResults(result);
+            } else {
+                updateStatus('analysisStatus', `❌ ${result.message}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error analyzing and generating:', error);
+            updateStatus('analysisStatus', 'Analysis error - check server connection', 'error');
+        }
+    }
+    
+    // Display Functions
+    function displayMelodyResults(result) {
+        const resultsSection = document.getElementById('results');
+        const keyInfo = document.getElementById('keyInfo');
+        const progressions = document.getElementById('progressions');
+        const arrangementLink = document.getElementById('arrangementLink');
+        const visualizationLink = document.getElementById('visualizationLink');
+        
+        if (!resultsSection || !keyInfo || !progressions || !arrangementLink || !visualizationLink) return;
+        
+        resultsSection.style.display = 'block';
+        
+        // Key information
+        keyInfo.innerHTML = 
+            `<strong>Detected Key:</strong> ${result.key} (confidence: ${result.key_confidence.toFixed(2)})`;
+        
+        // Chord progressions
+        let progressionsHtml = '<h4>Chord Progressions:</h4>';
+        Object.entries(result.all_harmonizations).forEach(([style, data]) => {
+            const harmonizationData = data as { progression: string[], confidence: number };
+            const isSelected = style === result.selected_harmonization.style;
+            const highlight = isSelected ? 'style="background: #ffffcc; padding: 10px; border-radius: 8px;"' : '';
+            progressionsHtml += `<div ${highlight}>
+                <strong>${style}${isSelected ? ' (Selected)' : ''}:</strong> 
+                <div class="chord-progression">${harmonizationData.progression.join(' → ')}</div>
+                <small>Confidence: ${harmonizationData.confidence.toFixed(1)}%</small>
+            </div>`;
+        });
+        progressions.innerHTML = progressionsHtml;
+        
+        // Clear arrangement link
+        arrangementLink.innerHTML = '<em>No arrangement generated (melody analysis only)</em>';
+        
+        // Visualization link
+        if (result.visualization && result.visualization.success) {
+            visualizationLink.innerHTML = 
+                `<strong>Visualization:</strong> <a href="${API_BASE}${result.visualization.download_url}" target="_blank" rel="noopener">📊 View Chord Progression Chart</a>`;
+        } else {
+            visualizationLink.innerHTML = '';
+        }
+    }
+    
+    function displayFullResults(result) {
+        const resultsSection = document.getElementById('results');
+        const keyInfo = document.getElementById('keyInfo');
+        const progressions = document.getElementById('progressions');
+        const arrangementLink = document.getElementById('arrangementLink');
+        const visualizationLink = document.getElementById('visualizationLink');
+        
+        if (!resultsSection || !keyInfo || !progressions || !arrangementLink || !visualizationLink) return;
+        
+        resultsSection.style.display = 'block';
+        
+        // Key information
+        keyInfo.innerHTML = 
+            `<strong>Detected Key:</strong> ${result.key} (confidence: ${result.key_confidence.toFixed(2)})`;
+        
+        // Chord progressions
+        let progressionsHtml = '<h4>Chord Progressions:</h4>';
+        Object.entries(result.chord_progressions).forEach(([style, chords]) => {
+            const chordArray = chords as string[];
+            progressionsHtml += `<div>
+                <strong>${style}:</strong> 
+                <div class="chord-progression">${chordArray.join(' → ')}</div>
+            </div>`;
+        });
+        progressions.innerHTML = progressionsHtml;
+        
+        // Arrangement download link
+        if (result.arrangement_file) {
+            arrangementLink.innerHTML = 
+                `<strong>Generated Arrangement:</strong> <a href="${API_BASE}/download/${result.arrangement_file}" download>📥 Download MIDI (${result.arrangement_file})</a>`;
+        } else {
+            arrangementLink.innerHTML = '<em>No arrangement file generated</em>';
+        }
+        
+        // Visualization link
+        if (result.visualization_file) {
+            visualizationLink.innerHTML = 
+                `<strong>Visualization:</strong> <a href="${API_BASE}${result.visualization_url}" target="_blank" rel="noopener">📊 View Chord Progression Chart</a>`;
+        } else {
+            visualizationLink.innerHTML = '';
+        }
+    }
+    
+    // Utility Functions
+    function updateStatus(elementId, message, type) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        
+        element.textContent = message;
+        element.className = `status ${type}`;
+    }
+    
+    function startStatusUpdates() {
+        captureInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`${API_BASE}/midi/status`);
+                const status = await response.json();
+                
+                if (status.is_capturing) {
+                    updateStatus('captureStatus', 
+                        `🎵 Recording... ${status.events_captured} events, ${status.capture_duration.toFixed(1)}s`, 
+                        'recording');
+                } else {
+                    stopStatusUpdates();
+                    updateStatus('captureStatus', 
+                        `✅ Recording finished! ${status.events_captured} events captured`, 
+                        'ready');
+                }
+            } catch (error) {
+                console.error('Status update error:', error);
+                stopStatusUpdates();
+            }
+        }, 500);
+    }
+    
+    function stopStatusUpdates() {
+        if (captureInterval) {
+            clearInterval(captureInterval);
+            captureInterval = null;
+        }
+    }
+    
+    // Event Listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        // Update complexity display values
+        const bassComplexity = document.getElementById('bassComplexity') as HTMLInputElement;
+        const drumComplexity = document.getElementById('drumComplexity') as HTMLInputElement;
+        const tempoBPM = document.getElementById('tempoBPM') as HTMLInputElement;
+        const bassValue = document.getElementById('bassValue');
+        const drumValue = document.getElementById('drumValue');
+        const tempoValue = document.getElementById('tempoValue');
+        
+        if (bassComplexity && bassValue) {
+            bassComplexity.addEventListener('input', function(e) {
+                const target = e.target as HTMLInputElement;
+                bassValue.textContent = target.value;
+            });
+        }
+        
+        if (drumComplexity && drumValue) {
+            drumComplexity.addEventListener('input', function(e) {
+                const target = e.target as HTMLInputElement;
+                drumValue.textContent = target.value;
+            });
+        }
+        
+        if (tempoBPM && tempoValue) {
+            tempoBPM.addEventListener('input', function(e) {
+                const target = e.target as HTMLInputElement;
+                tempoValue.textContent = target.value;
+            });
+        }
+        
+        // Load devices on page load
+        loadDevices();
+        
+        // Add keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Ctrl/Cmd + R for record (prevent default refresh)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+                e.preventDefault();
+                startCapture();
+            }
+            // Ctrl/Cmd + S for stop
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                stopCapture();
+            }
+            // Ctrl/Cmd + A for analyze
+            if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+                e.preventDefault();
+                analyzeMelodyOnly();
+            }
+        });
+    });
+    
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden && captureInterval) {
+            // Keep monitoring but reduce frequency when tab is hidden
+            clearInterval(captureInterval);
+            captureInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/midi/status`);
+                    const status = await response.json();
+                    if (!status.is_capturing) {
+                        stopStatusUpdates();
+                        updateStatus('captureStatus', 'Recording may have finished', 'ready');
+                    }
+                } catch (error) {
+                    stopStatusUpdates();
+                }
+            }, 2000); // Check every 2 seconds when hidden
+        }
+    });
+
+    // Make functions globally accessible for onclick handlers
+    (window as any).connectDevice = connectDevice;
+    (window as any).loadDevices = loadDevices;
+    (window as any).startCapture = startCapture;
+    (window as any).startDirectCapture = startDirectCapture;
+    (window as any).stopCapture = stopCapture;
+    (window as any).analyzeMelodyOnly = analyzeMelodyOnly;
+    (window as any).analyzeAndGenerate = analyzeAndGenerate;
+</script>
+</body>
+</html>

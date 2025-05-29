@@ -4,7 +4,25 @@ revert to basic_rnn, put bass complexity = 1
 
 
 
+Phase 1: Continue with Astro (Short Term)
 
+Perfect your UI/UX and workflow
+Add Whisper + ElevenLabs to your Python backend
+Get the functionality solid
+
+Phase 2: Migrate to Tauri (Medium Term)
+
+Port your Astro frontend to vanilla HTML/CSS/JS
+Keep your Python backend for MIDI + AI processing
+Package as lightweight desktop app
+
+🧠 AI Integration Considerations:
+Whisper + ElevenLabs work beautifully with Python:
+
+OpenAI Python SDK for Whisper
+ElevenLabs Python SDK
+Your existing Python MIDI code
+All in one cohesive backend
 
 
 

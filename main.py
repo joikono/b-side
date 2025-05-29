@@ -664,7 +664,6 @@ async def analyze_live_midi_melody_only(
             timestamp = int(time.time())
             os.makedirs("generated_visualizations", exist_ok=True)
             viz_filename = f"live_melody_{harmonization_style}_{timestamp}_four_ways.png"
-            viz_path = os.path.join("generated_visualizations", viz_filename)
             
             print(f"📊 Creating live melody four-way visualization...")
             try:
@@ -676,7 +675,6 @@ async def analyze_live_midi_melody_only(
                     phrase_prog,         # phrase_progression
                     key,                 # key
                     [],                  # notes (will be extracted inside function)
-                    viz_path             # output_file
                 )
                 viz_success = True
             except Exception as e:
@@ -1205,7 +1203,6 @@ async def analyze_live_midi(
             # Create four-way visualization for live analysis
             print(f"📊 Creating live analysis four-way visualization...")
             viz_filename = f"live_analysis_{harmonization_style}_{timestamp}_four_ways.png" 
-            viz_path = os.path.join("generated_visualizations", viz_filename)
             
             try:
                 # Use existing four-way visualization function
@@ -1216,7 +1213,6 @@ async def analyze_live_midi(
                     phrase_prog,         # phrase_progression
                     key,                 # key
                     [],                  # notes (will be extracted inside function)
-                    viz_path             # output_file
                 )
                 viz_success = True
             except Exception as e:
