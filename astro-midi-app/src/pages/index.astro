@@ -790,7 +790,22 @@ const apiBase = "http://localhost:8000";
         
         startMIDIRecording() {
             console.log('🎵 Starting MIDI recording after count-in...');
-            startDirectCapture();
+            
+            // Calculate much longer buffer time to ensure we capture everything
+            const tempoBPMSlider = document.getElementById('tempoBPM');
+            const currentTempo = tempoBPMSlider ? parseInt(tempoBPMSlider.value) : 100;
+            const beatsPerSecond = currentTempo / 60;
+            const durationFor16Beats = 16 / beatsPerSecond;
+            
+            // Add 3 second buffer to absolutely ensure we don't cut off
+            const bufferedDuration = durationFor16Beats + 3.0;
+            
+            console.log(`🎯 EXTENDED recording: ${bufferedDuration.toFixed(1)}s (${durationFor16Beats.toFixed(1)}s + 3s buffer) for 16 beats at ${currentTempo} BPM`);
+            
+            // Wait a tiny bit to ensure metronome timing is perfect
+            setTimeout(() => {
+                startDirectCapture(bufferedDuration);
+            }, 50); // 50ms delay for perfect sync
         }
     }
 
@@ -1248,12 +1263,26 @@ const apiBase = "http://localhost:8000";
         }
     }
     
-    function startDirectCapture() {
+    function startDirectCapture(predefinedDuration = null) {
         const captureModeSelect = document.getElementById('captureMode');
         if (!captureModeSelect) return;
         
         const mode = captureModeSelect.value;
-        const duration = mode === 'time' ? 9.6 : 30.0;
+        
+        let duration;
+        if (predefinedDuration) {
+            // Use predefined duration (from metronome)
+            duration = predefinedDuration;
+        } else {
+            // Calculate duration for manual start
+            const tempoBPMSlider = document.getElementById('tempoBPM');
+            const currentTempo = tempoBPMSlider ? parseInt(tempoBPMSlider.value) : 100;
+            const beatsPerSecond = currentTempo / 60;
+            const durationFor16Beats = 16 / beatsPerSecond;
+            duration = mode === 'time' ? durationFor16Beats + 1.0 : 30.0; // Add buffer for manual mode too
+        }
+        
+        console.log(`🎵 Recording for ${duration.toFixed(1)}s (mode: ${mode})`);
         
         // Start frontend MIDI recording
         midiRecorder.startRecording(mode, duration);
@@ -1316,15 +1345,63 @@ const apiBase = "http://localhost:8000";
             
             const result = await response.json();
             
-            updateStatus('captureStatus', '✅ MIDI uploaded and ready for analysis!', 'ready');
-            console.log('🎹 MIDI uploaded successfully:', result);
+            updateStatus('captureStatus', '✅ MIDI analyzed with auto-generated visualization!', 'ready');
+            console.log('🎹 MIDI analyzed successfully:', result);
             
             // Store uploaded filename for analysis
             window.uploadedMidiResult = result;
             
+            // AUTO-DISPLAY the analysis results with visualization
+            displayAutoAnalysisResults(result);
+            
         } catch (error) {
             console.error('Error uploading MIDI:', error);
             updateStatus('captureStatus', 'Failed to upload recorded MIDI', 'error');
+        }
+    }
+    
+    // Display auto-analysis results immediately after recording
+    function displayAutoAnalysisResults(result) {
+        const resultsSection = document.getElementById('results');
+        const keyInfo = document.getElementById('keyInfo');
+        const progressions = document.getElementById('progressions');
+        const arrangementLink = document.getElementById('arrangementLink');
+        const visualizationLink = document.getElementById('visualizationLink');
+        
+        if (!resultsSection || !keyInfo || !progressions || !arrangementLink || !visualizationLink) return;
+        
+        resultsSection.style.display = 'block';
+        
+        // Calculate max confidence for display
+        const maxConfidence = Math.max(
+            result.harmonizations.simple_pop.confidence,
+            result.harmonizations.folk_acoustic.confidence,
+            result.harmonizations.bass_foundation.confidence,
+            result.harmonizations.phrase_foundation.confidence
+        ) / 100;
+        
+        keyInfo.innerHTML = 
+            `<strong>Detected Key:</strong> ${result.key} (confidence: ${maxConfidence.toFixed(2)}) - <em>Auto-analyzed from recording</em>`;
+        
+        let progressionsHtml = '<h4>🎵 All 4 Chord Progression Options (8 chords each):</h4>';
+        Object.entries(result.harmonizations).forEach(([style, data]) => {
+            const styleDisplayName = style.replace('_', '/').replace(/\b\w/g, l => l.toUpperCase());
+            progressionsHtml += `<div style="margin: 10px 0; padding: 10px; border-radius: 8px; background: #f0f0f0;">
+                <strong>${styleDisplayName}:</strong> 
+                <div class="chord-progression">${data.progression.join(' → ')}</div>
+                <small>Confidence: ${data.confidence.toFixed(1)}% | Forced 8-chord analysis</small>
+            </div>`;
+        });
+        progressions.innerHTML = progressionsHtml;
+        
+        arrangementLink.innerHTML = '<em>Use buttons below to analyze specific styles or generate full arrangements</em>';
+        
+        // Show auto-generated visualization
+        if (result.visualization && result.visualization.success) {
+            visualizationLink.innerHTML = 
+                `<strong>📊 Auto-Generated Visualization:</strong> <a href="${API_BASE}${result.visualization.download_url}" target="_blank" rel="noopener">View Complete Analysis Chart</a> <small>(All 4 harmonization options)</small>`;
+        } else {
+            visualizationLink.innerHTML = '<em>Visualization generation failed</em>';
         }
     }
     

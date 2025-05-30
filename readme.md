@@ -1,6 +1,6 @@
 pip install -r requirements.txt
 
-tidy up and make visualization work after capturing. 
+tidy up and make midi play in browser.
 
 
 
