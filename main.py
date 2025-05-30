@@ -386,10 +386,13 @@ async def analyze_melody(
     """
     Analyze melody and get 4 harmonization options.
     *** PRIMARY ENDPOINT for frontend-recorded MIDI ***
-    *** ENFORCES EXACTLY 8 CHORDS ***
+    *** ENFORCES EXACTLY 8 CHORDS + AUTO-GENERATES VISUALIZATION ***
     """
     if not file.filename.endswith(('.mid', '.midi')):
         raise HTTPException(status_code=400, detail="File must be a MIDI file")
+
+    # Ensure output directory exists for visualizations
+    os.makedirs("generated_visualizations", exist_ok=True)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.mid') as temp_file:
         content = await file.read()
@@ -402,6 +405,42 @@ async def analyze_melody(
 
         simple_prog, folk_prog, bass_prog, phrase_prog = progressions
         simple_conf, folk_conf, bass_conf, phrase_conf = confidences
+
+        print(f"🎼 Analysis complete - Key: {key}")
+        print(f"🎵 8-Chord Progressions Generated:")
+        print(f"  Simple: {' → '.join(simple_prog)}")
+        print(f"  Folk: {' → '.join(folk_prog)}")
+        print(f"  Bass: {' → '.join(bass_prog)}")
+        print(f"  Phrase: {' → '.join(phrase_prog)}")
+
+        # AUTO-GENERATE FOUR-WAY VISUALIZATION
+        timestamp = int(time.time())
+        base_name = os.path.splitext(file.filename)[0]
+        viz_filename = f"{base_name}_auto_analysis_{timestamp}_four_ways.png"
+        viz_path = os.path.join("generated_visualizations", viz_filename)
+        
+        print(f"📊 Auto-generating four-way visualization...")
+        viz_success = False
+        try:
+            # Extract notes for visualization
+            from melody_analyzer2 import extract_melody_with_timing
+            extracted_notes, _ = extract_melody_with_timing(temp_path, tolerance_beats=tolerance_beats)
+            
+            # Generate four-way visualization automatically
+            create_four_way_visualization(
+                temp_path,           # midi_file
+                segments,            # all_segments  
+                bass_prog,           # bass_progression
+                phrase_prog,         # phrase_progression
+                key,                 # key
+                extracted_notes,     # notes (properly extracted)
+                viz_filename         # output_file (just filename, function adds directory)
+            )
+            viz_success = True
+            print(f"✅ Visualization auto-generated: {viz_filename}")
+        except Exception as e:
+            print(f"❌ Visualization generation failed: {e}")
+            viz_success = False
 
         return {
             "filename": file.filename,
@@ -425,7 +464,14 @@ async def analyze_melody(
                 }
             },
             "analysis_type": "melody",
-            "segments": len(segments)
+            "segments": len(segments),
+            "forced_8_chords": True,
+            "visualization": {
+                "success": viz_success,
+                "file": viz_filename if viz_success else None,
+                "download_url": f"/download/viz/{viz_filename}" if viz_success else None,
+                "auto_generated": True
+            }
         }
 
     except Exception as e:

@@ -1,6 +1,6 @@
 pip install -r requirements.txt
 
-revert to basic_rnn, put bass complexity = 1
+tidy up and make visualization work after capturing. 
 
 
 
