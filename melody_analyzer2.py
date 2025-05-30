@@ -1,4 +1,4 @@
-# also includes folk, just that
+# melody_analyzer2
 
 """
 This module analyzes melodic MIDI files to suggest FOUR different chord progression

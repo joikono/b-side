@@ -1,6 +1,6 @@
 ---
-// MidiAnalysisDemo.astro
-// Server-side logic can go here if needed
+// index.astro - Frontend-Only MIDI Analysis Demo
+// Perfect audio quality with Web MIDI API + Web Audio API
 const title = "🎹 Live MIDI Analysis Demo";
 const apiBase = "http://localhost:8000";
 ---
@@ -23,6 +23,34 @@ const apiBase = "http://localhost:8000";
             </select>
             <button class="connect-btn" onclick="connectDevice()">Connect Device</button>
             <button onclick="loadDevices()">🔄 Refresh Devices</button>
+            <div id="midiStatus" class="status ready">Ready to connect</div>
+            
+            <!-- Piano Sound Controls -->
+            <div id="pianoControls" style="display: none; margin-top: 15px;">
+                <label>
+                    Piano Volume: 
+                    <input type="range" id="pianoVolume" min="0" max="100" value="70">
+                    <span id="volumeValue">70%</span>
+                </label>
+                <br>
+                <label>
+                    Piano Sound: 
+                    <select id="pianoSound">
+                        <option value="piano">Piano</option>
+                        <option value="electric">Electric Piano</option>
+                        <option value="organ">Organ</option>
+                        <option value="synth">Synth</option>
+                    </select>
+                </label>
+                <br>
+                <label>
+                    Reverb Amount: 
+                    <input type="range" id="reverbAmount" min="0" max="100" value="15">
+                    <span id="reverbValue">15%</span>
+                </label>
+                <br>
+                <button class="melody-btn" onclick="testPianoSound()">🎹 Test Sound</button>
+            </div>
         </section>
         
         <!-- Capture Controls Section -->
@@ -39,8 +67,8 @@ const apiBase = "http://localhost:8000";
             <br>
             <label>
                 Tempo (BPM): 
-                <input type="range" id="tempoBPM" min="60" max="180" value="120"> 
-                <span id="tempoValue">120</span>
+                <input type="range" id="tempoBPM" min="60" max="180" value="100"> 
+                <span id="tempoValue">100</span>
             </label>
             <br>
             <label>
@@ -444,15 +472,180 @@ const apiBase = "http://localhost:8000";
     const API_BASE = 'http://localhost:8000';
     
     // Global variables
-    let captureInterval;
     let metronome;
-    let Tone; // Will be loaded dynamically
+    let pianoSynth;
+    let midiAccess;
+    let midiInput;
+    let midiRecorder;
+    
+    // MIDI Recording Buffer - FRONTEND ONLY (No WebSockets!)
+    class MidiRecorder {
+        constructor() {
+            this.isRecording = false;
+            this.recordedNotes = [];
+            this.startTime = null;
+            this.recordingDuration = 0;
+            this.silenceTimeout = null;
+            this.mode = 'time';
+        }
+        
+        startRecording(mode = 'time', duration = 9.6) {
+            this.isRecording = true;
+            this.recordedNotes = [];
+            this.startTime = performance.now();
+            this.mode = mode;
+            this.recordingDuration = duration * 1000; // Convert to milliseconds
+            
+            console.log(`🎹 MIDI Recording started (${mode} mode)`);
+            
+            if (mode === 'time') {
+                // Stop after fixed duration
+                setTimeout(() => {
+                    if (this.isRecording) {
+                        this.stopRecording();
+                    }
+                }, this.recordingDuration);
+            } else if (mode === 'silence') {
+                // Monitor for silence
+                this.resetSilenceTimer();
+            }
+        }
+        
+        stopRecording() {
+            if (!this.isRecording) return;
+            
+            this.isRecording = false;
+            
+            if (this.silenceTimeout) {
+                clearTimeout(this.silenceTimeout);
+                this.silenceTimeout = null;
+            }
+            
+            const totalDuration = (performance.now() - this.startTime) / 1000;
+            console.log(`🎹 MIDI Recording stopped - Duration: ${totalDuration.toFixed(1)}s, Notes: ${this.recordedNotes.length}`);
+            
+            return this.recordedNotes;
+        }
+        
+        addNote(note, velocity, timestamp, isNoteOn) {
+            if (!this.isRecording) return;
+            
+            const relativeTime = (timestamp - this.startTime) / 1000; // Convert to seconds
+            
+            this.recordedNotes.push({
+                note: note,
+                velocity: velocity,
+                time: relativeTime,
+                isNoteOn: isNoteOn
+            });
+            
+            // Reset silence timer for silence mode
+            if (this.mode === 'silence' && isNoteOn) {
+                this.resetSilenceTimer();
+            }
+        }
+        
+        resetSilenceTimer() {
+            if (this.silenceTimeout) {
+                clearTimeout(this.silenceTimeout);
+            }
+            
+            // Stop recording after 2 seconds of silence
+            this.silenceTimeout = setTimeout(() => {
+                if (this.isRecording) {
+                    this.stopRecording();
+                }
+            }, 2000);
+        }
+        
+        convertToMidiBlob() {
+            if (this.recordedNotes.length === 0) {
+                throw new Error('No notes recorded');
+            }
+            
+            // Simple MIDI file creation
+            // This creates a basic MIDI file with the recorded notes
+            const midiData = this.createMidiData(this.recordedNotes);
+            return new Blob([midiData], { type: 'audio/midi' });
+        }
+        
+        createMidiData(notes) {
+            // Very simplified MIDI file creation
+            // In a production app, you'd use a proper MIDI library
+            // For now, we'll create a minimal MIDI file structure
+            
+            const header = new Uint8Array([
+                0x4D, 0x54, 0x68, 0x64, // "MThd"
+                0x00, 0x00, 0x00, 0x06, // Header length
+                0x00, 0x00, // Format 0
+                0x00, 0x01, // 1 track
+                0x00, 0x60  // 96 ticks per quarter note
+            ]);
+            
+            const trackData = this.createTrackData(notes);
+            const trackHeader = new Uint8Array([
+                0x4D, 0x54, 0x72, 0x6B, // "MTrk"
+                ...this.int32ToBytes(trackData.length)
+            ]);
+            
+            // Combine header + track header + track data
+            const midiFile = new Uint8Array(header.length + trackHeader.length + trackData.length);
+            midiFile.set(header, 0);
+            midiFile.set(trackHeader, header.length);
+            midiFile.set(trackData, header.length + trackHeader.length);
+            
+            return midiFile;
+        }
+        
+        createTrackData(notes) {
+            const events = [];
+            let currentTime = 0;
+            
+            // Sort notes by time
+            const sortedNotes = [...notes].sort((a, b) => a.time - b.time);
+            
+            for (const note of sortedNotes) {
+                const deltaTime = Math.max(0, Math.round((note.time - currentTime) * 96)); // Convert to ticks
+                currentTime = note.time;
+                
+                // Add MIDI event
+                const status = note.isNoteOn ? 0x90 : 0x80; // Note on/off on channel 1
+                events.push(...this.variableLengthQuantity(deltaTime));
+                events.push(status, note.note, note.velocity);
+            }
+            
+            // End of track
+            events.push(0x00, 0xFF, 0x2F, 0x00);
+            
+            return new Uint8Array(events);
+        }
+        
+        variableLengthQuantity(value) {
+            const bytes = [];
+            bytes.unshift(value & 0x7F);
+            value >>= 7;
+            while (value > 0) {
+                bytes.unshift((value & 0x7F) | 0x80);
+                value >>= 7;
+            }
+            return bytes;
+        }
+        
+        int32ToBytes(value) {
+            return [
+                (value >> 24) & 0xFF,
+                (value >> 16) & 0xFF,
+                (value >> 8) & 0xFF,
+                value & 0xFF
+            ];
+        }
+    }
     
     // Metronome Class using Web Audio API
     class Metronome {
         constructor() {
             this.isPlaying = false;
-            this.bpm = 120;
+            this.bpm = 100;
             this.beatCount = 0;
             this.isCountingIn = false;
             this.countInBeat = 0;
@@ -460,15 +653,14 @@ const apiBase = "http://localhost:8000";
             this.audioContext = null;
             this.intervalId = null;
             this.nextNoteTime = 0;
-            this.lookahead = 25.0; // How frequently to call scheduling function (in milliseconds)
-            this.scheduleAheadTime = 0.1; // How far ahead to schedule audio (sec)
+            this.lookahead = 25.0;
+            this.scheduleAheadTime = 0.1;
         }
         
         async initAudio() {
             if (!this.audioContext) {
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 
-                // Resume context if suspended (required by some browsers)
                 if (this.audioContext.state === 'suspended') {
                     await this.audioContext.resume();
                 }
@@ -476,17 +668,14 @@ const apiBase = "http://localhost:8000";
         }
         
         playClick(time, isCountIn) {
-            // Create oscillator
             const osc = this.audioContext.createOscillator();
             const envelope = this.audioContext.createGain();
             
             osc.connect(envelope);
             envelope.connect(this.audioContext.destination);
             
-            // Different frequencies for count-in vs recording
-            osc.frequency.value = isCountIn ? 800 : 400; // Higher pitch for count-in
+            osc.frequency.value = isCountIn ? 800 : 400;
             
-            // Create click envelope
             envelope.gain.setValueAtTime(0, time);
             envelope.gain.linearRampToValueAtTime(0.3, time + 0.001);
             envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
@@ -496,7 +685,6 @@ const apiBase = "http://localhost:8000";
         }
         
         nextNote() {
-            // Advance current note and time by a quarter note
             const secondsPerBeat = 60.0 / this.bpm;
             this.nextNoteTime += secondsPerBeat;
             
@@ -508,7 +696,6 @@ const apiBase = "http://localhost:8000";
                     this.isCountingIn = false;
                     this.beatCount = 0;
                     this.recordingStarted = true;
-                    // Trigger actual MIDI recording start
                     setTimeout(() => this.startMIDIRecording(), 50);
                 }
             } else {
@@ -543,7 +730,6 @@ const apiBase = "http://localhost:8000";
                 this.recordingStarted = false;
                 this.isPlaying = true;
                 
-                // Start the scheduler
                 this.nextNoteTime = this.audioContext.currentTime;
                 this.scheduler();
                 
@@ -560,7 +746,6 @@ const apiBase = "http://localhost:8000";
             
             if (!beatCircle || !beatCount) return;
             
-            // Remove previous classes
             beatCircle.classList.remove('active', 'count-in');
             beatCount.classList.remove('count-in', 'recording');
             
@@ -574,7 +759,6 @@ const apiBase = "http://localhost:8000";
                 beatCount.textContent = `Beat ${beat}`;
             }
             
-            // Remove visual feedback after a short delay
             setTimeout(() => {
                 beatCircle.classList.remove('active', 'count-in');
             }, 150);
@@ -591,7 +775,6 @@ const apiBase = "http://localhost:8000";
                     this.intervalId = null;
                 }
                 
-                // Reset visual indicator
                 const beatCircle = document.getElementById('beatCircle');
                 const beatCount = document.getElementById('beatCount');
                 
@@ -606,67 +789,352 @@ const apiBase = "http://localhost:8000";
         }
         
         startMIDIRecording() {
-            // This will be called after count-in completes
             console.log('🎵 Starting MIDI recording after count-in...');
-            this.actuallyStartMIDICapture();
+            startDirectCapture();
+        }
+    }
+
+    // Enhanced Piano Synthesizer Class - Controlled Reverb
+    class PianoSynth {
+        constructor() {
+            this.audioContext = null;
+            this.masterGain = null;
+            this.dryGain = null;
+            this.wetGain = null;
+            this.reverbNode = null;
+            this.activeNotes = new Map();
+            this.volume = 0.7;
+            this.reverbAmount = 0.15; // 15% reverb by default
+            this.soundType = 'piano';
         }
         
-        async actuallyStartMIDICapture() {
-            const captureModeSelect = document.getElementById('captureMode') as HTMLSelectElement;
-            if (!captureModeSelect) return;
-            
-            const mode = captureModeSelect.value;
-            const duration = mode === 'time' ? 9.6 : 30.0;
-            
-            try {
-                const response = await fetch(`${API_BASE}/midi/start-capture`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mode, duration })
-                });
-                const result = await response.json();
+        async init() {
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 
-                if (result.success) {
-                    updateStatus('captureStatus', '🎵 Recording MIDI... Play your melody!', 'recording');
-                    startStatusUpdates();
-                } else {
-                    updateStatus('captureStatus', `Failed to start recording: ${result.message}`, 'error');
-                    this.stop(); // Stop metronome on error
+                // Create gain nodes for dry/wet mixing
+                this.masterGain = this.audioContext.createGain();
+                this.dryGain = this.audioContext.createGain();
+                this.wetGain = this.audioContext.createGain();
+                
+                // Set initial volumes
+                this.masterGain.gain.value = this.volume;
+                this.updateReverbMix();
+                
+                // Create subtle reverb
+                await this.createReverb();
+                
+                // Connect: dry signal bypasses reverb, wet signal goes through reverb
+                this.dryGain.connect(this.masterGain);
+                this.wetGain.connect(this.reverbNode);
+                this.reverbNode.connect(this.masterGain);
+                this.masterGain.connect(this.audioContext.destination);
+                
+                if (this.audioContext.state === 'suspended') {
+                    await this.audioContext.resume();
                 }
-            } catch (error) {
-                console.error('Error starting MIDI capture:', error);
-                updateStatus('captureStatus', 'Recording error - check server connection', 'error');
-                this.stop(); // Stop metronome on error
+                
+                console.log('🎹 Enhanced piano synthesizer initialized with controlled reverb');
             }
+        }
+        
+        async createReverb() {
+            // Create convolution reverb - MUCH more subtle
+            this.reverbNode = this.audioContext.createConvolver();
+            
+            // Create shorter, more subtle impulse response
+            const length = this.audioContext.sampleRate * 0.5; // Only 0.5 seconds
+            const impulse = this.audioContext.createBuffer(2, length, this.audioContext.sampleRate);
+            
+            for (let channel = 0; channel < 2; channel++) {
+                const channelData = impulse.getChannelData(channel);
+                for (let i = 0; i < length; i++) {
+                    const decay = Math.pow(1 - i / length, 3); // Faster decay
+                    channelData[i] = (Math.random() * 2 - 1) * decay * 0.03; // Much quieter
+                }
+            }
+            
+            this.reverbNode.buffer = impulse;
+        }
+        
+        updateReverbMix() {
+            if (this.dryGain && this.wetGain) {
+                // Mix between dry and wet signal
+                this.dryGain.gain.value = 1 - this.reverbAmount;
+                this.wetGain.gain.value = this.reverbAmount;
+            }
+        }
+        
+        midiNoteToFrequency(midiNote) {
+            return 440 * Math.pow(2, (midiNote - 69) / 12);
+        }
+        
+        createEnhancedPianoSound(frequency, startTime, duration = 3.0) {
+            // Create multiple oscillators for rich harmonics
+            const fundamental = this.audioContext.createOscillator();
+            const harmonic2 = this.audioContext.createOscillator();
+            const harmonic3 = this.audioContext.createOscillator();
+            const subharmonic = this.audioContext.createOscillator();
+            
+            // Create filters for each oscillator
+            const filter1 = this.audioContext.createBiquadFilter();
+            const filter2 = this.audioContext.createBiquadFilter();
+            const filter3 = this.audioContext.createBiquadFilter();
+            const subFilter = this.audioContext.createBiquadFilter();
+            
+            // Create gain nodes for mixing
+            const fundamentalGain = this.audioContext.createGain();
+            const harmonic2Gain = this.audioContext.createGain();
+            const harmonic3Gain = this.audioContext.createGain();
+            const subGain = this.audioContext.createGain();
+            const masterEnvelope = this.audioContext.createGain();
+            
+            // Configure oscillators based on sound type
+            switch (this.soundType) {
+                case 'piano':
+                    fundamental.type = 'triangle';
+                    harmonic2.type = 'sine';
+                    harmonic3.type = 'sawtooth';
+                    subharmonic.type = 'sine';
+                    
+                    fundamental.frequency.value = frequency;
+                    harmonic2.frequency.value = frequency * 2;
+                    harmonic3.frequency.value = frequency * 3;
+                    subharmonic.frequency.value = frequency * 0.5;
+                    
+                    filter1.type = 'lowpass';
+                    filter1.frequency.value = 2500;
+                    filter1.Q.value = 1;
+                    
+                    filter2.type = 'bandpass';
+                    filter2.frequency.value = 1500;
+                    filter2.Q.value = 2;
+                    
+                    filter3.type = 'highpass';
+                    filter3.frequency.value = 500;
+                    filter3.Q.value = 1;
+                    
+                    subFilter.type = 'lowpass';
+                    subFilter.frequency.value = 200;
+                    subFilter.Q.value = 1;
+                    
+                    fundamentalGain.gain.value = 0.6;
+                    harmonic2Gain.gain.value = 0.3;
+                    harmonic3Gain.gain.value = 0.15;
+                    subGain.gain.value = 0.4;
+                    break;
+                    
+                case 'electric':
+                    fundamental.type = 'sawtooth';
+                    harmonic2.type = 'triangle';
+                    harmonic3.type = 'square';
+                    subharmonic.type = 'sine';
+                    
+                    fundamental.frequency.value = frequency;
+                    harmonic2.frequency.value = frequency * 2;
+                    harmonic3.frequency.value = frequency * 4;
+                    subharmonic.frequency.value = frequency * 0.5;
+                    
+                    filter1.type = 'lowpass';
+                    filter1.frequency.value = 1800;
+                    filter1.Q.value = 3;
+                    
+                    fundamentalGain.gain.value = 0.7;
+                    harmonic2Gain.gain.value = 0.4;
+                    harmonic3Gain.gain.value = 0.2;
+                    subGain.gain.value = 0.3;
+                    break;
+                    
+                case 'organ':
+                    fundamental.type = 'sawtooth';
+                    harmonic2.type = 'square';
+                    harmonic3.type = 'triangle';
+                    subharmonic.type = 'square';
+                    
+                    fundamental.frequency.value = frequency;
+                    harmonic2.frequency.value = frequency * 2;
+                    harmonic3.frequency.value = frequency * 3;
+                    subharmonic.frequency.value = frequency;
+                    
+                    filter1.type = 'lowpass';
+                    filter1.frequency.value = 3500;
+                    filter1.Q.value = 0.5;
+                    
+                    fundamentalGain.gain.value = 0.5;
+                    harmonic2Gain.gain.value = 0.4;
+                    harmonic3Gain.gain.value = 0.3;
+                    subGain.gain.value = 0.6;
+                    break;
+                    
+                case 'synth':
+                    fundamental.type = 'square';
+                    harmonic2.type = 'sawtooth';
+                    harmonic3.type = 'triangle';
+                    subharmonic.type = 'square';
+                    
+                    fundamental.frequency.value = frequency;
+                    harmonic2.frequency.value = frequency * 1.5;
+                    harmonic3.frequency.value = frequency * 0.75;
+                    subharmonic.frequency.value = frequency * 0.5;
+                    
+                    filter1.type = 'bandpass';
+                    filter1.frequency.value = 1200;
+                    filter1.Q.value = 8;
+                    
+                    fundamentalGain.gain.value = 0.8;
+                    harmonic2Gain.gain.value = 0.6;
+                    harmonic3Gain.gain.value = 0.4;
+                    subGain.gain.value = 0.5;
+                    break;
+            }
+            
+            // Connect the audio graph
+            fundamental.connect(filter1);
+            filter1.connect(fundamentalGain);
+            
+            harmonic2.connect(filter2);
+            filter2.connect(harmonic2Gain);
+            
+            harmonic3.connect(filter3);
+            filter3.connect(harmonic3Gain);
+            
+            subharmonic.connect(subFilter);
+            subFilter.connect(subGain);
+            
+            // Connect to both dry and wet paths
+            fundamentalGain.connect(masterEnvelope);
+            harmonic2Gain.connect(masterEnvelope);
+            harmonic3Gain.connect(masterEnvelope);
+            subGain.connect(masterEnvelope);
+            
+            // Split signal to dry and wet paths
+            masterEnvelope.connect(this.dryGain);  // Dry signal (no reverb)
+            masterEnvelope.connect(this.wetGain);  // Wet signal (with reverb)
+            
+            // Create realistic ADSR envelope
+            const attackTime = 0.005;
+            const decayTime = 0.3;
+            const sustainLevel = 0.4;
+            const releaseTime = 1.2;
+            
+            masterEnvelope.gain.setValueAtTime(0, startTime);
+            masterEnvelope.gain.linearRampToValueAtTime(0.9, startTime + attackTime);
+            masterEnvelope.gain.exponentialRampToValueAtTime(sustainLevel, startTime + attackTime + decayTime);
+            masterEnvelope.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+            
+            // Start all oscillators
+            fundamental.start(startTime);
+            harmonic2.start(startTime);
+            harmonic3.start(startTime);
+            subharmonic.start(startTime);
+            
+            // Stop all oscillators
+            fundamental.stop(startTime + duration);
+            harmonic2.stop(startTime + duration);
+            harmonic3.stop(startTime + duration);
+            subharmonic.stop(startTime + duration);
+            
+            return { 
+                fundamental, harmonic2, harmonic3, subharmonic,
+                masterEnvelope, filters: [filter1, filter2, filter3, subFilter]
+            };
+        }
+        
+        playNote(midiNote, velocity = 100) {
+            if (!this.audioContext) return;
+            
+            const frequency = this.midiNoteToFrequency(midiNote);
+            const startTime = this.audioContext.currentTime;
+            const normalizedVelocity = Math.max(0.1, Math.min(1.0, velocity / 127));
+            
+            const sound = this.createEnhancedPianoSound(frequency, startTime, 4.0);
+            sound.masterEnvelope.gain.value *= normalizedVelocity;
+            
+            this.activeNotes.set(midiNote, sound);
+            
+            console.log(`🎹 Playing note ${midiNote} (${frequency.toFixed(1)}Hz) at velocity ${velocity}`);
+        }
+        
+        stopNote(midiNote) {
+            if (this.activeNotes.has(midiNote)) {
+                const sound = this.activeNotes.get(midiNote);
+                const releaseTime = this.audioContext.currentTime;
+                
+                // Natural release envelope
+                sound.masterEnvelope.gain.exponentialRampToValueAtTime(0.001, releaseTime + 0.8);
+                
+                this.activeNotes.delete(midiNote);
+                console.log(`🎹 Stopping note ${midiNote}`);
+            }
+        }
+        
+        setVolume(volume) {
+            this.volume = Math.max(0, Math.min(1, volume / 100));
+            if (this.masterGain) {
+                this.masterGain.gain.setTargetAtTime(this.volume, this.audioContext.currentTime, 0.1);
+            }
+        }
+        
+        setReverbAmount(amount) {
+            this.reverbAmount = Math.max(0, Math.min(1, amount / 100));
+            this.updateReverbMix();
+            console.log(`🎹 Reverb amount changed to: ${(this.reverbAmount * 100).toFixed(0)}%`);
+        }
+        
+        setSoundType(soundType) {
+            this.soundType = soundType;
+            console.log(`🎹 Piano sound changed to: ${soundType}`);
+        }
+        
+        testSound() {
+            // Play a nice chord progression
+            this.playNote(60, 80); // C4
+            setTimeout(() => this.playNote(64, 70), 150); // E4
+            setTimeout(() => this.playNote(67, 70), 300); // G4
+            setTimeout(() => this.playNote(72, 60), 450); // C5
         }
     }
     
-    // Initialize metronome
+    // Initialize objects
     metronome = new Metronome();
-    
-    // MIDI Device Management
+    pianoSynth = new PianoSynth();
+    midiRecorder = new MidiRecorder();
+
+    // Web MIDI API Functions
     async function loadDevices() {
         try {
-            const response = await fetch(`${API_BASE}/midi/devices`);
-            const devices = await response.json();
+            if (!navigator.requestMIDIAccess) {
+                updateStatus('midiStatus', 'Web MIDI API not supported in this browser', 'error');
+                const select = document.getElementById('deviceSelect');
+                if (select) {
+                    select.innerHTML = '<option>Web MIDI not supported</option>';
+                }
+                return;
+            }
+            
+            midiAccess = await navigator.requestMIDIAccess();
+            const inputs = Array.from(midiAccess.inputs.values());
             
             const select = document.getElementById('deviceSelect');
             if (!select) return;
             
             select.innerHTML = '';
             
-            if (devices.length === 0) {
+            if (inputs.length === 0) {
                 select.innerHTML = '<option>No MIDI devices found</option>';
             } else {
-                devices.forEach(device => {
+                inputs.forEach((input, index) => {
                     const option = document.createElement('option');
-                    option.value = device.id;
-                    option.textContent = `${device.id}: ${device.name}`;
+                    option.value = input.id;
+                    option.textContent = `${input.name}`;
                     select.appendChild(option);
                 });
             }
+            
+            console.log('🎹 Found MIDI inputs:', inputs.length);
         } catch (error) {
-            console.error('Error loading devices:', error);
+            console.error('Error accessing MIDI:', error);
+            updateStatus('midiStatus', 'Failed to access MIDI devices', 'error');
             const select = document.getElementById('deviceSelect');
             if (select) {
                 select.innerHTML = '<option>Error loading devices</option>';
@@ -675,37 +1143,90 @@ const apiBase = "http://localhost:8000";
     }
     
     async function connectDevice() {
-        const deviceSelect = document.getElementById('deviceSelect') as HTMLSelectElement;
+        const deviceSelect = document.getElementById('deviceSelect');
         if (!deviceSelect) return;
         
         const deviceId = deviceSelect.value;
         
-        if (!deviceId || deviceId.includes('No MIDI') || deviceId.includes('Error')) {
-            updateStatus('captureStatus', 'Please select a valid MIDI device', 'error');
+        if (!deviceId || deviceId.includes('No MIDI') || deviceId.includes('Error') || deviceId.includes('Web MIDI')) {
+            updateStatus('midiStatus', 'Please select a valid MIDI device', 'error');
             return;
         }
         
         try {
-            const response = await fetch(`${API_BASE}/midi/connect/${deviceId}`, {
-                method: 'POST'
-            });
-            const result = await response.json();
+            // Initialize enhanced piano synthesizer
+            await pianoSynth.init();
             
-            if (result.success) {
-                updateStatus('captureStatus', 'Connected! Ready to record', 'ready');
-            } else {
-                updateStatus('captureStatus', `Failed to connect: ${result.message || 'Unknown error'}`, 'error');
+            // Find the selected MIDI input
+            const input = Array.from(midiAccess.inputs.values()).find(inp => inp.id === deviceId);
+            
+            if (!input) {
+                updateStatus('midiStatus', 'Selected MIDI device not found', 'error');
+                return;
             }
+            
+            // Set up MIDI input listener
+            input.onmidimessage = handleMIDIMessage;
+            midiInput = input;
+            
+            updateStatus('midiStatus', '🎹 Piano connected! Studio-quality audio enabled', 'ready');
+            
+            // Show piano controls
+            const pianoControls = document.getElementById('pianoControls');
+            if (pianoControls) {
+                pianoControls.style.display = 'block';
+            }
+            
+            console.log('🎹 Connected to MIDI device:', input.name);
+            
         } catch (error) {
-            console.error('Error connecting device:', error);
-            updateStatus('captureStatus', 'Connection error - check if server is running', 'error');
+            console.error('Error connecting to MIDI device:', error);
+            updateStatus('midiStatus', 'Failed to connect to MIDI device', 'error');
+        }
+    }
+    
+    function handleMIDIMessage(message) {
+        const [command, note, velocity] = message.data;
+        const timestamp = performance.now();
+        
+        // Note On (command 144-159, velocity > 0)
+        if (command >= 144 && command <= 159 && velocity > 0) {
+            // Play sound with perfect quality
+            pianoSynth.playNote(note, velocity);
+            
+            // Record note if recording
+            if (midiRecorder.isRecording) {
+                midiRecorder.addNote(note, velocity, timestamp, true);
+            }
+        }
+        // Note Off (command 128-143 or command 144-159 with velocity 0)
+        else if ((command >= 128 && command <= 143) || 
+                 (command >= 144 && command <= 159 && velocity === 0)) {
+            // Stop sound naturally
+            pianoSynth.stopNote(note);
+            
+            // Record note off if recording
+            if (midiRecorder.isRecording) {
+                midiRecorder.addNote(note, 0, timestamp, false);
+            }
+        }
+    }
+    
+    function testPianoSound() {
+        if (pianoSynth) {
+            pianoSynth.testSound();
         }
     }
     
     // Recording Functions
     async function startCapture() {
-        const enableMetronomeCheckbox = document.getElementById('enableMetronome') as HTMLInputElement;
-        const tempoBPMSlider = document.getElementById('tempoBPM') as HTMLInputElement;
+        if (!midiInput) {
+            updateStatus('captureStatus', 'Please connect a MIDI device first', 'error');
+            return;
+        }
+        
+        const enableMetronomeCheckbox = document.getElementById('enableMetronome');
+        const tempoBPMSlider = document.getElementById('tempoBPM');
         
         if (!enableMetronomeCheckbox || !tempoBPMSlider) return;
         
@@ -713,70 +1234,108 @@ const apiBase = "http://localhost:8000";
         const tempo = parseInt(tempoBPMSlider.value);
         
         if (enableMetronome) {
-            // Start with metronome count-in
             updateStatus('captureStatus', '🥁 Count-in starting... Get ready!', 'analyzing');
             
             try {
-                await metronome.start(tempo, true); // true = count-in enabled
+                await metronome.start(tempo, true);
             } catch (error) {
                 console.error('Error starting metronome:', error);
                 updateStatus('captureStatus', 'Metronome error - starting recording without metronome', 'error');
-                // Fallback to direct recording
                 startDirectCapture();
             }
         } else {
-            // Start recording directly without metronome
             startDirectCapture();
         }
     }
     
-    async function startDirectCapture() {
-        const captureModeSelect = document.getElementById('captureMode') as HTMLSelectElement;
+    function startDirectCapture() {
+        const captureModeSelect = document.getElementById('captureMode');
         if (!captureModeSelect) return;
         
         const mode = captureModeSelect.value;
         const duration = mode === 'time' ? 9.6 : 30.0;
         
+        // Start frontend MIDI recording
+        midiRecorder.startRecording(mode, duration);
+        
+        updateStatus('captureStatus', '🎵 Recording... Play your melody!', 'recording');
+        
+        // Monitor recording status
+        const statusInterval = setInterval(() => {
+            if (!midiRecorder.isRecording) {
+                clearInterval(statusInterval);
+                const notes = midiRecorder.recordedNotes;
+                updateStatus('captureStatus', `✅ Recording finished! ${notes.length} MIDI events captured`, 'ready');
+                
+                // Auto-analyze if notes were captured
+                if (notes.length > 0) {
+                    updateStatus('captureStatus', '📤 Uploading recorded MIDI for analysis...', 'analyzing');
+                    uploadRecordedMIDI();
+                }
+            } else {
+                const notes = midiRecorder.recordedNotes;
+                const duration = (performance.now() - midiRecorder.startTime) / 1000;
+                updateStatus('captureStatus', `🎵 Recording... ${notes.length} events, ${duration.toFixed(1)}s`, 'recording');
+            }
+        }, 100);
+    }
+    
+    function stopCapture() {
+        // Stop metronome
+        if (metronome) {
+            metronome.stop();
+        }
+        
+        // Stop MIDI recording
+        if (midiRecorder.isRecording) {
+            midiRecorder.stopRecording();
+        }
+        
+        updateStatus('captureStatus', '⏹️ Recording stopped', 'ready');
+    }
+    
+    // Upload recorded MIDI to backend
+    async function uploadRecordedMIDI() {
         try {
-            const response = await fetch(`${API_BASE}/midi/start-capture`, {
+            // Convert recorded notes to MIDI file
+            const midiBlob = midiRecorder.convertToMidiBlob();
+            
+            // Create form data for upload
+            const formData = new FormData();
+            formData.append('file', midiBlob, 'recorded_melody.mid');
+            
+            // Upload to backend
+            const response = await fetch(`${API_BASE}/analyze/melody`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mode, duration })
+                body: formData
             });
+            
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${response.status}`);
+            }
+            
             const result = await response.json();
             
-            if (result.success) {
-                updateStatus('captureStatus', '🎵 Recording... Play your melody!', 'recording');
-                startStatusUpdates();
-            } else {
-                updateStatus('captureStatus', `Failed to start recording: ${result.message}`, 'error');
-            }
-        } catch (error) {
-            console.error('Error starting capture:', error);
-            updateStatus('captureStatus', 'Recording error - check server connection', 'error');
-        }
-    }
-    
-    async function stopCapture() {
-        try {
-            // Stop metronome first
-            if (metronome) {
-                metronome.stop();
-            }
+            updateStatus('captureStatus', '✅ MIDI uploaded and ready for analysis!', 'ready');
+            console.log('🎹 MIDI uploaded successfully:', result);
             
-            // Stop MIDI recording
-            await fetch(`${API_BASE}/midi/stop-capture`, { method: 'POST' });
-            stopStatusUpdates();
-            updateStatus('captureStatus', '⏹️ Recording stopped', 'ready');
+            // Store uploaded filename for analysis
+            window.uploadedMidiResult = result;
+            
         } catch (error) {
-            console.error('Error stopping capture:', error);
-            updateStatus('captureStatus', 'Error stopping recording', 'error');
+            console.error('Error uploading MIDI:', error);
+            updateStatus('captureStatus', 'Failed to upload recorded MIDI', 'error');
         }
     }
     
-    // Analysis Functions
+    // Analysis Functions (updated to use uploaded file results)
     async function analyzeMelodyOnly() {
-        const harmonySelect = document.getElementById('harmonyStyle') as HTMLSelectElement;
+        if (!window.uploadedMidiResult) {
+            updateStatus('analysisStatus', 'Please record a melody first', 'error');
+            return;
+        }
+        
+        const harmonySelect = document.getElementById('harmonyStyle');
         if (!harmonySelect) return;
         
         const style = harmonySelect.value;
@@ -784,22 +1343,41 @@ const apiBase = "http://localhost:8000";
         updateStatus('analysisStatus', '🎵 Analyzing melody for chord progression...', 'analyzing');
         
         try {
-            const response = await fetch(`${API_BASE}/midi/analyze-melody-live`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    harmonization_style: style,
-                    bpm: 100
-                })
-            });
-            const result = await response.json();
+            // Use the already analyzed result from upload
+            const result = window.uploadedMidiResult;
             
-            if (result.success) {
-                updateStatus('analysisStatus', '✅ Melody analysis complete!', 'ready');
-                displayMelodyResults(result);
-            } else {
-                updateStatus('analysisStatus', `❌ ${result.message}`, 'error');
-            }
+            // Map harmonization styles to progressions from the upload result
+            const styleMap = {
+                "simple_pop": result.harmonizations.simple_pop,
+                "folk_acoustic": result.harmonizations.folk_acoustic,
+                "bass_foundation": result.harmonizations.bass_foundation,
+                "phrase_foundation": result.harmonizations.phrase_foundation
+            };
+            
+            const selectedHarmonization = styleMap[style];
+            
+            const melodyResult = {
+                success: true,
+                filename: result.filename,
+                key: result.key,
+                key_confidence: Math.max(
+                    result.harmonizations.simple_pop.confidence,
+                    result.harmonizations.folk_acoustic.confidence,
+                    result.harmonizations.bass_foundation.confidence,
+                    result.harmonizations.phrase_foundation.confidence
+                ) / 100,
+                selected_harmonization: {
+                    style: style,
+                    progression: selectedHarmonization.progression,
+                    confidence: selectedHarmonization.confidence
+                },
+                all_harmonizations: result.harmonizations,
+                visualization: null // No visualization for melody-only
+            };
+            
+            updateStatus('analysisStatus', '✅ Melody analysis complete!', 'ready');
+            displayMelodyResults(melodyResult);
+            
         } catch (error) {
             console.error('Error analyzing melody:', error);
             updateStatus('analysisStatus', 'Melody analysis error - check server connection', 'error');
@@ -807,9 +1385,14 @@ const apiBase = "http://localhost:8000";
     }
     
     async function analyzeAndGenerate() {
-        const harmonySelect = document.getElementById('harmonyStyle') as HTMLSelectElement;
-        const bassSlider = document.getElementById('bassComplexity') as HTMLInputElement;
-        const drumSlider = document.getElementById('drumComplexity') as HTMLInputElement;
+        if (!window.uploadedMidiResult) {
+            updateStatus('analysisStatus', 'Please record a melody first', 'error');
+            return;
+        }
+        
+        const harmonySelect = document.getElementById('harmonyStyle');
+        const bassSlider = document.getElementById('bassComplexity');
+        const drumSlider = document.getElementById('drumComplexity');
         
         if (!harmonySelect || !bassSlider || !drumSlider) return;
         
@@ -817,27 +1400,56 @@ const apiBase = "http://localhost:8000";
         const bassComplexity = parseInt(bassSlider.value);
         const drumComplexity = parseInt(drumSlider.value);
         
-        updateStatus('analysisStatus', '🎵 Analyzing melody and generating arrangement...', 'analyzing');
+        updateStatus('analysisStatus', '🎵 Generating full arrangement...', 'analyzing');
         
         try {
-            const response = await fetch(`${API_BASE}/midi/analyze-generate`, {
+            // Get the selected chord progression from uploaded result
+            const result = window.uploadedMidiResult;
+            const styleMap = {
+                "simple_pop": result.harmonizations.simple_pop.progression,
+                "folk_acoustic": result.harmonizations.folk_acoustic.progression,
+                "bass_foundation": result.harmonizations.bass_foundation.progression,
+                "phrase_foundation": result.harmonizations.phrase_foundation.progression
+            };
+            
+            const selectedProgression = styleMap[style];
+            
+            // Generate arrangement from the chord progression
+            const response = await fetch(`${API_BASE}/generate/arrangement`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    harmonization_style: style,
+                    chord_progression: selectedProgression,
                     bpm: 100,
                     bass_complexity: bassComplexity,
                     drum_complexity: drumComplexity,
-                    hi_hat_divisions: 2
+                    hi_hat_divisions: 2,
+                    snare_beats: [2, 4]
                 })
             });
-            const result = await response.json();
             
-            if (result.success) {
+            const arrangementResult = await response.json();
+            
+            if (arrangementResult.output_file) {
+                const fullResult = {
+                    success: true,
+                    key: result.key,
+                    key_confidence: Math.max(
+                        result.harmonizations.simple_pop.confidence,
+                        result.harmonizations.folk_acoustic.confidence,
+                        result.harmonizations.bass_foundation.confidence,
+                        result.harmonizations.phrase_foundation.confidence
+                    ) / 100,
+                    chord_progressions: styleMap,
+                    arrangement_file: arrangementResult.output_file.split('/').pop(), // Get filename only
+                    visualization_file: null,
+                    visualization_url: null
+                };
+                
                 updateStatus('analysisStatus', '✅ Analysis and arrangement complete!', 'ready');
-                displayFullResults(result);
+                displayFullResults(fullResult);
             } else {
-                updateStatus('analysisStatus', `❌ ${result.message}`, 'error');
+                updateStatus('analysisStatus', `❌ ${arrangementResult.message || 'Arrangement generation failed'}`, 'error');
             }
         } catch (error) {
             console.error('Error analyzing and generating:', error);
@@ -857,34 +1469,23 @@ const apiBase = "http://localhost:8000";
         
         resultsSection.style.display = 'block';
         
-        // Key information
         keyInfo.innerHTML = 
             `<strong>Detected Key:</strong> ${result.key} (confidence: ${result.key_confidence.toFixed(2)})`;
         
-        // Chord progressions
         let progressionsHtml = '<h4>Chord Progressions:</h4>';
         Object.entries(result.all_harmonizations).forEach(([style, data]) => {
-            const harmonizationData = data as { progression: string[], confidence: number };
             const isSelected = style === result.selected_harmonization.style;
             const highlight = isSelected ? 'style="background: #ffffcc; padding: 10px; border-radius: 8px;"' : '';
             progressionsHtml += `<div ${highlight}>
                 <strong>${style}${isSelected ? ' (Selected)' : ''}:</strong> 
-                <div class="chord-progression">${harmonizationData.progression.join(' → ')}</div>
-                <small>Confidence: ${harmonizationData.confidence.toFixed(1)}%</small>
+                <div class="chord-progression">${data.progression.join(' → ')}</div>
+                <small>Confidence: ${data.confidence.toFixed(1)}%</small>
             </div>`;
         });
         progressions.innerHTML = progressionsHtml;
         
-        // Clear arrangement link
         arrangementLink.innerHTML = '<em>No arrangement generated (melody analysis only)</em>';
-        
-        // Visualization link
-        if (result.visualization && result.visualization.success) {
-            visualizationLink.innerHTML = 
-                `<strong>Visualization:</strong> <a href="${API_BASE}${result.visualization.download_url}" target="_blank" rel="noopener">📊 View Chord Progression Chart</a>`;
-        } else {
-            visualizationLink.innerHTML = '';
-        }
+        visualizationLink.innerHTML = '';
     }
     
     function displayFullResults(result) {
@@ -898,22 +1499,18 @@ const apiBase = "http://localhost:8000";
         
         resultsSection.style.display = 'block';
         
-        // Key information
         keyInfo.innerHTML = 
             `<strong>Detected Key:</strong> ${result.key} (confidence: ${result.key_confidence.toFixed(2)})`;
         
-        // Chord progressions
         let progressionsHtml = '<h4>Chord Progressions:</h4>';
         Object.entries(result.chord_progressions).forEach(([style, chords]) => {
-            const chordArray = chords as string[];
             progressionsHtml += `<div>
                 <strong>${style}:</strong> 
-                <div class="chord-progression">${chordArray.join(' → ')}</div>
+                <div class="chord-progression">${chords.join(' → ')}</div>
             </div>`;
         });
         progressions.innerHTML = progressionsHtml;
         
-        // Arrangement download link
         if (result.arrangement_file) {
             arrangementLink.innerHTML = 
                 `<strong>Generated Arrangement:</strong> <a href="${API_BASE}/download/${result.arrangement_file}" download>📥 Download MIDI (${result.arrangement_file})</a>`;
@@ -921,7 +1518,6 @@ const apiBase = "http://localhost:8000";
             arrangementLink.innerHTML = '<em>No arrangement file generated</em>';
         }
         
-        // Visualization link
         if (result.visualization_file) {
             visualizationLink.innerHTML = 
                 `<strong>Visualization:</strong> <a href="${API_BASE}${result.visualization_url}" target="_blank" rel="noopener">📊 View Chord Progression Chart</a>`;
@@ -939,118 +1535,90 @@ const apiBase = "http://localhost:8000";
         element.className = `status ${type}`;
     }
     
-    function startStatusUpdates() {
-        captureInterval = setInterval(async () => {
-            try {
-                const response = await fetch(`${API_BASE}/midi/status`);
-                const status = await response.json();
-                
-                if (status.is_capturing) {
-                    updateStatus('captureStatus', 
-                        `🎵 Recording... ${status.events_captured} events, ${status.capture_duration.toFixed(1)}s`, 
-                        'recording');
-                } else {
-                    stopStatusUpdates();
-                    updateStatus('captureStatus', 
-                        `✅ Recording finished! ${status.events_captured} events captured`, 
-                        'ready');
-                }
-            } catch (error) {
-                console.error('Status update error:', error);
-                stopStatusUpdates();
-            }
-        }, 500);
-    }
-    
-    function stopStatusUpdates() {
-        if (captureInterval) {
-            clearInterval(captureInterval);
-            captureInterval = null;
-        }
-    }
-    
     // Event Listeners
     document.addEventListener('DOMContentLoaded', function() {
-        // Update complexity display values
-        const bassComplexity = document.getElementById('bassComplexity') as HTMLInputElement;
-        const drumComplexity = document.getElementById('drumComplexity') as HTMLInputElement;
-        const tempoBPM = document.getElementById('tempoBPM') as HTMLInputElement;
+        const bassComplexity = document.getElementById('bassComplexity');
+        const drumComplexity = document.getElementById('drumComplexity');
+        const tempoBPM = document.getElementById('tempoBPM');
         const bassValue = document.getElementById('bassValue');
         const drumValue = document.getElementById('drumValue');
         const tempoValue = document.getElementById('tempoValue');
         
         if (bassComplexity && bassValue) {
             bassComplexity.addEventListener('input', function(e) {
-                const target = e.target as HTMLInputElement;
-                bassValue.textContent = target.value;
+                bassValue.textContent = e.target.value;
             });
         }
         
         if (drumComplexity && drumValue) {
             drumComplexity.addEventListener('input', function(e) {
-                const target = e.target as HTMLInputElement;
-                drumValue.textContent = target.value;
+                drumValue.textContent = e.target.value;
             });
         }
         
         if (tempoBPM && tempoValue) {
             tempoBPM.addEventListener('input', function(e) {
-                const target = e.target as HTMLInputElement;
-                tempoValue.textContent = target.value;
+                tempoValue.textContent = e.target.value;
+            });
+        }
+        
+        // Piano control event listeners
+        const pianoVolume = document.getElementById('pianoVolume');
+        const pianoSound = document.getElementById('pianoSound');
+        const reverbAmount = document.getElementById('reverbAmount');
+        const volumeValue = document.getElementById('volumeValue');
+        const reverbValue = document.getElementById('reverbValue');
+        
+        if (pianoVolume && volumeValue) {
+            pianoVolume.addEventListener('input', function(e) {
+                const volume = parseInt(e.target.value);
+                volumeValue.textContent = volume + '%';
+                pianoSynth.setVolume(volume);
+            });
+        }
+        
+        if (reverbAmount && reverbValue) {
+            reverbAmount.addEventListener('input', function(e) {
+                const reverb = parseInt(e.target.value);
+                reverbValue.textContent = reverb + '%';
+                pianoSynth.setReverbAmount(reverb);
+            });
+        }
+        
+        if (pianoSound) {
+            pianoSound.addEventListener('change', function(e) {
+                pianoSynth.setSoundType(e.target.value);
             });
         }
         
         // Load devices on page load
         loadDevices();
         
-        // Add keyboard shortcuts
+        // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
-            // Ctrl/Cmd + R for record (prevent default refresh)
             if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
                 e.preventDefault();
                 startCapture();
             }
-            // Ctrl/Cmd + S for stop
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
                 stopCapture();
             }
-            // Ctrl/Cmd + A for analyze
             if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
                 e.preventDefault();
                 analyzeMelodyOnly();
             }
         });
     });
-    
-    // Handle page visibility changes
-    document.addEventListener('visibilitychange', function() {
-        if (document.hidden && captureInterval) {
-            // Keep monitoring but reduce frequency when tab is hidden
-            clearInterval(captureInterval);
-            captureInterval = setInterval(async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/midi/status`);
-                    const status = await response.json();
-                    if (!status.is_capturing) {
-                        stopStatusUpdates();
-                        updateStatus('captureStatus', 'Recording may have finished', 'ready');
-                    }
-                } catch (error) {
-                    stopStatusUpdates();
-                }
-            }, 2000); // Check every 2 seconds when hidden
-        }
-    });
 
     // Make functions globally accessible for onclick handlers
     (window as any).connectDevice = connectDevice;
     (window as any).loadDevices = loadDevices;
     (window as any).startCapture = startCapture;
-    (window as any).startDirectCapture = startDirectCapture;
     (window as any).stopCapture = stopCapture;
     (window as any).analyzeMelodyOnly = analyzeMelodyOnly;
     (window as any).analyzeAndGenerate = analyzeAndGenerate;
+    (window as any).testPianoSound = testPianoSound;
 </script>
 </body>
 </html>
