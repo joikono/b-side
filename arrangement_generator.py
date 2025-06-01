@@ -7,6 +7,7 @@ KEY FEATURES:
 • 🎵 8-chord progression support (2-beat segments)
 • 🥁 AI-generated drum patterns
 • 🎸 AI-generated bass lines
+• 🔄 8x LOOPED OUTPUT - Perfect seamless loops!
 • Configurable complexity and style parameters
 • 📊 Complete MIDI arrangement output
 
@@ -15,12 +16,14 @@ WORKFLOW:
 2. Create chord progression from 8 chord roots
 3. Generate AI bass line and drum pattern
 4. Combine into complete arrangement
-5. Export as MIDI file
+5. Loop the arrangement 8 times for seamless playback
+6. Export as MIDI file
 """
 
 from note_seq.protobuf import generator_pb2  
 from model_manager import MagentaModelManager
 import note_seq  
+import copy
 
 def chord_name_to_midi_note(chord_name, octave=3):
     """
@@ -61,11 +64,13 @@ def generate_arrangement_from_chords(
     snare_beats=(2, 4),             # Which beats get snare hits
     output_file='generated_arrangement.mid',
     bass_rnn=None,                  # Pre-initialized bass generator
-    drum_rnn=None                   # Pre-initialized drum generator
+    drum_rnn=None,                  # Pre-initialized drum generator
+    loop_count=8                    # Number of times to loop the arrangement
 ):
     """
     Generate a complete arrangement from 8 chord names.
     Each chord represents a 2-beat segment (half measure at 100 BPM).
+    The final arrangement will be looped 8 times for seamless playback.
     """
     
     # Initialize models if not provided
@@ -73,6 +78,7 @@ def generate_arrangement_from_chords(
         bass_rnn, drum_rnn = MagentaModelManager.initialize_models()
     
     print(f"🎵 Generating arrangement from chord progression: {' → '.join(chord_progression)}")
+    print(f"🔄 Will loop the arrangement {loop_count} times")
     
     # Convert chord names to MIDI notes
     chord_roots = [chord_name_to_midi_note(chord, octave=3) for chord in chord_progression]
@@ -84,7 +90,8 @@ def generate_arrangement_from_chords(
     chord_duration = 2 * beat_s                            # 2 beats per chord
     total_duration = len(chord_progression) * chord_duration  # total arrangement duration
     
-    print(f"Total duration: {total_duration:.1f} seconds ({len(chord_progression)} chords × 2 beats each)")
+    print(f"Single loop duration: {total_duration:.1f} seconds ({len(chord_progression)} chords × 2 beats each)")
+    print(f"Total looped duration: {total_duration * loop_count:.1f} seconds")
     
     # Create root sequence with chord progression
     seed = note_seq.NoteSequence()
@@ -197,15 +204,15 @@ def generate_arrangement_from_chords(
     for n in bass_seq.notes:
         n.pitch = max(0, n.pitch - 12)
     
-    # Combine everything into final sequence
-    combined = note_seq.NoteSequence()
-    combined.ticks_per_quarter = seed.ticks_per_quarter
-    combined.tempos.extend(seed.tempos)
-    combined.time_signatures.extend(seed.time_signatures)
+    # Combine everything into final sequence (single loop)
+    single_loop = note_seq.NoteSequence()
+    single_loop.ticks_per_quarter = seed.ticks_per_quarter
+    single_loop.tempos.extend(seed.tempos)
+    single_loop.time_signatures.extend(seed.time_signatures)
     
     # Add chord roots as bass notes
     for n in seed.notes:
-        new_note = combined.notes.add()
+        new_note = single_loop.notes.add()
         new_note.CopyFrom(n)
         new_note.instrument = 0      # Bass channel
         new_note.program = 33        # Electric Bass (finger)
@@ -217,7 +224,7 @@ def generate_arrangement_from_chords(
         if n.start_time < chord_duration:
             continue
         
-        new_note = combined.notes.add()
+        new_note = single_loop.notes.add()
         new_note.CopyFrom(n)
         new_note.instrument = 0      # Bass channel
         new_note.program = 33        # Electric Bass (finger)
@@ -225,32 +232,62 @@ def generate_arrangement_from_chords(
     
     # Add drum notes
     for n in drum_seq.notes:
-        new_note = combined.notes.add()
+        new_note = single_loop.notes.add()
         new_note.CopyFrom(n)
         new_note.instrument = 9  # Drum channel (GM standard)
         new_note.is_drum = True
     
-    # Set total duration and export
-    combined.total_time = max(n.end_time for n in combined.notes)
-    note_seq.sequence_proto_to_midi_file(combined, output_file)
-    print(f"Generated arrangement saved to {output_file}")
-    print(f"Duration: {combined.total_time:.1f} seconds")
-
+    # Set single loop duration
+    single_loop.total_time = max(n.end_time for n in single_loop.notes)
+    original_duration = single_loop.total_time
     
-    return output_file # combined
+    print(f"🔄 Creating {loop_count} seamless loops...")
+    
+    # Create the final looped sequence
+    looped_sequence = note_seq.NoteSequence()
+    looped_sequence.ticks_per_quarter = single_loop.ticks_per_quarter
+    looped_sequence.tempos.extend(single_loop.tempos)
+    looped_sequence.time_signatures.extend(single_loop.time_signatures)
+    
+    # Copy the single loop multiple times
+    for loop_index in range(loop_count):
+        time_offset = loop_index * original_duration
+        
+        print(f"  Loop {loop_index + 1}/{loop_count}: offset +{time_offset:.1f}s")
+        
+        # Copy all notes from single loop with time offset
+        for note in single_loop.notes:
+            new_note = looped_sequence.notes.add()
+            new_note.CopyFrom(note)
+            new_note.start_time += time_offset
+            new_note.end_time += time_offset
+    
+    # Set final total duration
+    looped_sequence.total_time = original_duration * loop_count
+    
+    # Export looped sequence
+    note_seq.sequence_proto_to_midi_file(looped_sequence, output_file)
+    
+    print(f"✅ Generated looped arrangement saved to {output_file}")
+    print(f"📊 Single loop: {original_duration:.1f}s")
+    print(f"📊 Total duration: {looped_sequence.total_time:.1f}s ({loop_count} loops)")
+    print(f"🎵 Perfect for seamless playback - no timing gaps!")
+
+    return output_file
 
 # Fix for the timing issue in generate_arrangement_from_chords function
 
 def generate_arrangement(chord_progression, bpm=100, bass_complexity=2, drum_complexity=1, 
-                        hi_hat_divisions=4, snare_beats=(2, 4), output_file='arrangement.mid'):
+                        hi_hat_divisions=4, snare_beats=(2, 4), output_file='arrangement.mid',
+                        loop_count=8):
     """
     Generate a full arrangement from a chord progression.
-    Returns Path to generated MIDI file
+    Returns Path to generated MIDI file (looped 8 times by default)
     """
     from model_manager import get_models
     
-    print(f"Generating arrangement for: {' → '.join(chord_progression)}")
-    print(f"Settings: BPM={bpm}, Bass={bass_complexity}, Drums={drum_complexity}")
+    print(f"Generating looped arrangement for: {' → '.join(chord_progression)}")
+    print(f"Settings: BPM={bpm}, Bass={bass_complexity}, Drums={drum_complexity}, Loops={loop_count}")
     
     # Get pre-loaded models
     bass_rnn, drum_rnn = get_models()
@@ -265,15 +302,16 @@ def generate_arrangement(chord_progression, bpm=100, bass_complexity=2, drum_com
         snare_beats=snare_beats,
         output_file=output_file,
         bass_rnn=bass_rnn,
-        drum_rnn=drum_rnn
+        drum_rnn=drum_rnn,
+        loop_count=loop_count
     )
     
-    print(f"Arrangement saved as: {output_file}")
+    print(f"Looped arrangement saved as: {output_file}")
     return output_file
 
 def test_arrangement_generator():
     """Test the arrangement generator with a sample chord progression."""
-    print("=== TESTING MAGENTA ARRANGEMENT GENERATOR ===")
+    print("=== TESTING MAGENTA ARRANGEMENT GENERATOR (8x LOOPED) ===")
     
     # Sample 8-chord progression (2-beat segments)
     test_chords = ['C', 'C', 'G', 'G', 'Am', 'Am', 'F', 'F']
@@ -281,7 +319,7 @@ def test_arrangement_generator():
     # Initialize models once
     bass_rnn, drum_rnn = MagentaModelManager.initialize_models()
     
-    # Generate arrangement
+    # Generate looped arrangement
     arrangement = generate_arrangement_from_chords(
         chord_progression=test_chords,
         bpm=100,
@@ -289,12 +327,14 @@ def test_arrangement_generator():
         drum_complexity=1,
         hi_hat_divisions=4,
         snare_beats=(2, 4),
-        output_file='test_arrangement.mid',
+        output_file='test_arrangement_8x_looped.mid',
         bass_rnn=bass_rnn,
-        drum_rnn=drum_rnn
+        drum_rnn=drum_rnn,
+        loop_count=4
     )
     
     print("Test completed successfully!")
+    print("🎵 You now have a perfectly looped MIDI file!")
     return arrangement
 
 def get_user_complexity_settings():
@@ -340,9 +380,21 @@ def get_user_complexity_settings():
         except ValueError:
             print("Please enter a number")
     
-    return bass_complexity, drum_complexity, bpm
-
-
+    # Loop count
+    print("\nLoop Count:")
+    print("  8 = Default (recommended for seamless playback)")
+    print("  4 = Shorter loops")
+    print("  16 = Longer sessions")
+    while True:
+        try:
+            loop_count = int(input("Choose loop count (default 8): ") or "8")
+            if 1 <= loop_count <= 32:
+                break
+            print("Please enter a number between 1-32")
+        except ValueError:
+            print("Please enter a number")
+    
+    return bass_complexity, drum_complexity, bpm, loop_count
 
 if __name__ == "__main__":
     # Run test

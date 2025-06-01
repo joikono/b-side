@@ -113,7 +113,7 @@ def main():
     bass_complexity, drum_complexity, bpm = get_user_complexity_settings()
     
     # Create output directory and generate filename
-    output_dir = "generated_arrangements"
+    output_dir = "astro-midi-app/public/generated_arrangements"
     os.makedirs(output_dir, exist_ok=True)  # Create folder if it doesn't exist
     
     base_name = os.path.splitext(os.path.basename(midi_file))[0]

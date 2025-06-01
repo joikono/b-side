@@ -26,7 +26,7 @@ Thumbs.db
 Desktop.ini
 
 # Generated content
-generated_arrangements/
+astro-midi-app/public/generated_arrangements/
 generated_visualizations/
 *.png
 *.jpg

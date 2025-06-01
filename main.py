@@ -673,7 +673,7 @@ async def generate_arrangement(request: ArrangementRequest):
 
     try:
         # Ensure output directory exists
-        output_dir = "generated_arrangements"
+        output_dir = "astro-midi-app/public/generated_arrangements"
         os.makedirs(output_dir, exist_ok=True)
 
         # Generate unique filename
@@ -761,7 +761,7 @@ async def full_analysis_and_generation(
             }
 
         # Step 3: Generate arrangement
-        output_dir = "generated_arrangements"
+        output_dir = "astro-midi-app/public/generated_arrangements"
         os.makedirs(output_dir, exist_ok=True)
 
         timestamp = int(time.time())
@@ -802,7 +802,7 @@ async def full_analysis_and_generation(
 @app.get("/download/{filename}")
 async def download_file(filename: str):
     """Download generated MIDI files"""
-    file_path = os.path.join("generated_arrangements", filename)
+    file_path = os.path.join("astro-midi-app/public/generated_arrangements", filename)
 
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
@@ -961,7 +961,7 @@ async def analyze_melody_with_visualization(
 
 if __name__ == "__main__":
     # Create necessary directories
-    os.makedirs("generated_arrangements", exist_ok=True)
+    os.makedirs("astro-midi-app/public/generated_arrangements", exist_ok=True)
     os.makedirs("generated_visualizations", exist_ok=True)
 
     print("🚀 Starting MIDI Analysis API (Frontend-Only MIDI + Forced 8-Chord Rule)...")

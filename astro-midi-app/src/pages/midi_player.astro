@@ -1,0 +1,272 @@
+<!-- MIDI PLAYER -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>🎵 MIDI Player with 16-Beat Looping</title>
+    
+    <!-- Load the proven html-midi-player library -->
+    <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.4.0"></script>
+</head>
+<body>
+    <main>
+        <h1>🎵 MIDI Player with 16-Beat Looping</h1>
+        <p>Seamless 16-beat loop functionality with extended MIDI tracks</p>
+        
+        <div class="player-container">
+            <!-- MIDI player with native loop attribute -->
+            <midi-player 
+                src="/generated_arrangements/melody2_arrangement_1748797664.mid" 
+                sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
+                visualizer="#myVisualizer"
+                loop>
+            </midi-player>
+            
+            <!-- Visual piano roll -->
+            <midi-visualizer type="piano-roll" id="myVisualizer"></midi-visualizer>
+            
+            <!-- Custom controls for the player -->
+            <div class="custom-controls">
+                <div class="button-row">
+                    <button onclick="togglePlay()">⏯️ Play/Pause</button>
+                    <button onclick="stop()">⏹️ Stop</button>
+                    <button onclick="toggleLoop()">🔄 <span id="loopStatus">Loop: OFF</span></button>
+                </div>
+                
+                <div class="debug-info">
+                    <h4>🔍 Debug Info:</h4>
+                    <div id="playerInfo">Player loading...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+
+<style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        color: white;
+    }
+    
+    main {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: 30px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    
+    h1 {
+        text-align: center;
+        margin-bottom: 10px;
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    p {
+        text-align: center;
+        margin-bottom: 30px;
+        opacity: 0.9;
+    }
+    
+    .player-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    midi-player {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        display: block;
+        margin-bottom: 15px;
+    }
+    
+    midi-visualizer {
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 12px;
+        padding: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        min-height: 200px;
+        display: block;
+    }
+    
+    .custom-controls {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .button-row {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    button {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 25px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: linear-gradient(45deg, #4CAF50, #45a049);
+        color: white;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    .debug-info {
+        background: rgba(0, 0, 0, 0.2);
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+    }
+    
+    .debug-info h4 {
+        margin: 0 0 10px 0;
+        color: #FF5722;
+    }
+    
+    #playerInfo {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        color: #0f0;
+        background: #000;
+        padding: 10px;
+        border-radius: 5px;
+        min-height: 60px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+</style>
+
+<script>
+    // Simplified MIDI player with 16-beat default looping
+    let player;
+    let isLooping = false; // Set to OFF by default as requested
+    let baseBPM = 100; // Your desired BPM
+    const defaultBPM = 120; // Assumed player default BPM
+    const beatsPerLoop = 16; // Fixed 16-beat loops
+    let checkLoopInterval;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        player = document.querySelector('midi-player');
+        if (player) {
+            console.log('🎵 MIDI Player initialized');
+            // Set playbackRate to match desired BPM (100) from default (120)
+            player.playbackRate = baseBPM / defaultBPM;
+            updateDebugInfo(`Playback rate: ${player.playbackRate.toFixed(3)} for BPM ${baseBPM}`);
+            updateDebugInfo(`16-beat loop duration: ${getLoopEnd().toFixed(2)}s`);
+
+            player.addEventListener('start', () => {
+                updateDebugInfo('Playback started');
+                if (isLooping) {
+                    if (checkLoopInterval) clearInterval(checkLoopInterval);
+                    checkLoopInterval = setInterval(() => {
+                        if (player.currentTime !== undefined) {
+                            const loopEnd = getLoopEnd();
+                            const loopStart = getLoopStart();
+                            // Trigger loop 200ms early to beat the stop
+                            if (player.currentTime >= loopEnd - 0.2) {
+                                player.currentTime = loopStart;
+                                setTimeout(() => {
+                                    if (!player.playing) {
+                                        player.start();
+                                        updateDebugInfo('Player restarted after loop');
+                                    }
+                                }, 10); // Small delay to ensure time is set
+                                updateDebugInfo(`Loop: ${player.currentTime.toFixed(2)}s -> ${loopStart.toFixed(2)}s`);
+                            }
+                        }
+                    }, 5); // Check every 5ms for tighter control
+                }
+            });
+
+            player.addEventListener('stop', () => {
+                updateDebugInfo(`Stopped at ${player.currentTime?.toFixed(2) || 'unknown'}s, Looping: ${isLooping}`);
+                if (checkLoopInterval) {
+                    clearInterval(checkLoopInterval);
+                    checkLoopInterval = null;
+                }
+            });
+        } else {
+            console.error('❌ No MIDI player found');
+            updateDebugInfo('ERROR: MIDI player not found');
+        }
+    });
+
+    function getLoopStart() {
+        return 0; // Always start from beginning
+    }
+
+    function getLoopEnd() {
+        // Fixed 16-beat duration at 100 BPM
+        return (beatsPerLoop * 60) / baseBPM; // 9.6s for 16 beats at 100 BPM
+    }
+
+    function updateDebugInfo(message) {
+        const info = document.getElementById('playerInfo');
+        if (info) {
+            const timestamp = new Date().toLocaleTimeString();
+            info.innerHTML += `[${timestamp}] ${message}<br>`;
+            info.scrollTop = info.scrollHeight;
+        }
+    }
+
+    function togglePlay() {
+        if (player) {
+            if (player.playing) {
+                player.stop();
+            } else {
+                player.start();
+            }
+        }
+    }
+
+    function stop() {
+        if (player) {
+            player.stop();
+            player.currentTime = 0;
+            updateDebugInfo('Reset to start');
+        }
+    }
+
+    function toggleLoop() {
+        isLooping = !isLooping;
+        document.getElementById('loopStatus').textContent = `Loop: ${isLooping ? 'ON' : 'OFF'}`;
+        updateDebugInfo(`Looping: ${isLooping ? 'ON' : 'OFF'}`);
+        
+        // Clear interval when looping is turned off
+        if (!isLooping && checkLoopInterval) {
+            clearInterval(checkLoopInterval);
+            checkLoopInterval = null;
+        }
+    }
+
+    // Expose functions to HTML
+    window.togglePlay = togglePlay;
+    window.stop = stop;
+    window.toggleLoop = toggleLoop;
+</script>
+</body>
+</html>

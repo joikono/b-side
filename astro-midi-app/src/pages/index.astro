@@ -1,6 +1,6 @@
 ---
-// index.astro - Frontend-Only MIDI Analysis Demo
-// Perfect audio quality with Web MIDI API + Web Audio API
+// index.astro - Frontend-Only MIDI Analysis Demo with Integrated Player
+// Perfect audio quality with Web MIDI API + Web Audio API + MIDI Playback
 const title = "🎹 Live MIDI Analysis Demo";
 const apiBase = "http://localhost:8000";
 ---
@@ -10,6 +10,9 @@ const apiBase = "http://localhost:8000";
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
+    
+    <!-- Load the proven html-midi-player library -->
+    <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.4.0"></script>
 </head>
 <body>
     <main>
@@ -29,8 +32,8 @@ const apiBase = "http://localhost:8000";
             <div id="pianoControls" style="display: none; margin-top: 15px;">
                 <label>
                     Piano Volume: 
-                    <input type="range" id="pianoVolume" min="0" max="100" value="70">
-                    <span id="volumeValue">70%</span>
+                    <input type="range" id="pianoVolume" min="0" max="100" value="20">
+                    <span id="volumeValue">20%</span>
                 </label>
                 <br>
                 <label>
@@ -48,8 +51,6 @@ const apiBase = "http://localhost:8000";
                     <input type="range" id="reverbAmount" min="0" max="100" value="15">
                     <span id="reverbValue">15%</span>
                 </label>
-                <br>
-                <button class="melody-btn" onclick="testPianoSound()">🎹 Test Sound</button>
             </div>
         </section>
         
@@ -65,17 +66,6 @@ const apiBase = "http://localhost:8000";
                 </select>
             </label>
             <br>
-            <label>
-                Tempo (BPM): 
-                <input type="range" id="tempoBPM" min="60" max="180" value="100"> 
-                <span id="tempoValue">100</span>
-            </label>
-            <br>
-            <label>
-                <input type="checkbox" id="enableMetronome" checked> 
-                Enable Metronome
-            </label>
-            <br>
             <div class="button-group">
                 <button class="record-btn" onclick="startCapture()">🎹 Start Recording</button>
                 <button class="stop-btn" onclick="stopCapture()">⏹️ Stop Recording</button>
@@ -87,9 +77,52 @@ const apiBase = "http://localhost:8000";
             </div>
         </section>
         
+        <!-- Results Section - Moved here so user doesn't have to scroll -->
+        <section class="section results" id="results" style="display: none;">
+            <h3>🎵 Analysis Results</h3>
+            <div id="keyInfo"></div>
+            <div id="progressions"></div>
+            <div id="arrangementLink"></div>
+            <div id="visualizationLink" class="visualization"></div>
+            
+            <!-- Integrated MIDI Player -->
+            <div id="midiPlayerSection" class="midi-player-section" style="display: none;">
+                <h4>🎵 Play Your Generated Arrangement</h4>
+                <p>Listen to your AI-generated arrangement with seamless 16-beat looping</p>
+                
+                <div class="player-container">
+                    <!-- MIDI player with native loop attribute -->
+                    <midi-player 
+                        id="arrangementPlayer"
+                        src="" 
+                        sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
+                        visualizer="#myVisualizer"
+                        loop>
+                    </midi-player>
+                    
+                    <!-- Visual piano roll -->
+                    <midi-visualizer type="piano-roll" id="myVisualizer"></midi-visualizer>
+                    
+                    <!-- Custom controls for the player -->
+                    <div class="midi-controls">
+                        <div class="button-row">
+                            <button onclick="toggleMidiPlay()" class="midi-btn">⏯️ Play/Pause</button>
+                            <button onclick="stopMidi()" class="midi-btn">⏹️ Stop</button>
+                            <button onclick="toggleMidiLoop()" class="midi-btn">🔄 <span id="midiLoopStatus">Loop: OFF</span></button>
+                        </div>
+                        
+                        <div class="midi-debug-info">
+                            <h5>🔍 Playback Info:</h5>
+                            <div id="midiPlayerInfo">Player ready...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
         <!-- Analysis Options Section -->
         <section class="section">
-            <h3>3. Analysis Options</h3>
+            <h3>3. Generate Full Arrangement</h3>
             <label>
                 Harmonization Style: 
                 <select id="harmonyStyle">
@@ -114,20 +147,11 @@ const apiBase = "http://localhost:8000";
             <br>
             
             <div class="button-group">
-                <button class="melody-btn" onclick="analyzeMelodyOnly()">🎵 Analyze Melody Only</button>
-                <button class="analyze-btn" onclick="analyzeAndGenerate()">🎼 Full Analysis + Arrangement</button>
+                <button class="analyze-btn" onclick="analyzeAndGenerate()">🎼 Generate Full Arrangement</button>
             </div>
-            <div id="analysisStatus" class="status ready">Ready to analyze</div>
+            <div id="analysisStatus" class="status ready">Ready to generate arrangement</div>
         </section>
-        
-        <!-- Results Section -->
-        <section class="section results" id="results" style="display: none;">
-            <h3>4. Results</h3>
-            <div id="keyInfo"></div>
-            <div id="progressions"></div>
-            <div id="arrangementLink"></div>
-            <div id="visualizationLink" class="visualization"></div>
-        </section>
+
     </main>
 </body>
 </html>
@@ -140,32 +164,44 @@ const apiBase = "http://localhost:8000";
     
     body {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        max-width: 800px;
+        max-width: 900px;
         margin: 0 auto;
         padding: 20px;
-        background-color: #fafafa;
+        background-color: #000000;
         line-height: 1.6;
     }
     
     main {
-        background: white;
+        background: rgb(39, 13, 82);
         border-radius: 12px;
         padding: 30px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
     
     h1 {
-        color: #2c3e50;
+        color: #ffffff;
         text-align: center;
         margin-bottom: 30px;
         font-size: 2.2rem;
     }
     
     h3 {
-        color: #34495e;
+        color: #ffffff;
         margin-bottom: 15px;
         border-bottom: 2px solid #ecf0f1;
         padding-bottom: 8px;
+    }
+    
+    h4 {
+        color: #ffffff;
+        margin-bottom: 10px;
+        font-size: 1.3rem;
+    }
+    
+    h5 {
+        color: #ffffff;
+        margin-bottom: 8px;
+        font-size: 1rem;
     }
     
     /* Section Styles */
@@ -174,7 +210,7 @@ const apiBase = "http://localhost:8000";
         padding: 20px;
         border: 1px solid #e1e8ed;
         border-radius: 12px;
-        background: #f8f9fa;
+        background: #0a69c7;
         transition: box-shadow 0.3s ease;
     }
     
@@ -228,6 +264,13 @@ const apiBase = "http://localhost:8000";
         color: white;
     }
     
+    .midi-btn {
+        background: linear-gradient(45deg, #00BCD4, #0097A7);
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+    }
+    
     /* Form Controls */
     select, input[type="range"] {
         padding: 10px;
@@ -277,7 +320,7 @@ const apiBase = "http://localhost:8000";
         display: block;
         margin: 10px 0;
         font-weight: 500;
-        color: #555;
+        color: #ffffff;
     }
     
     /* Status Styles */
@@ -351,6 +394,72 @@ const apiBase = "http://localhost:8000";
         background: #fff;
         border-radius: 8px;
         border: 1px solid #e1e8ed;
+    }
+    
+    /* MIDI Player Styles */
+    .midi-player-section {
+        margin-top: 30px;
+        padding: 25px;
+        background: linear-gradient(135deg, #02253b, #000000);
+        border-radius: 15px;
+        border: 2px solid #2196F3;
+        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+    }
+    
+    .player-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    midi-player {
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid rgba(33, 150, 243, 0.3);
+        display: block;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    midi-visualizer {
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 12px;
+        padding: 15px;
+        border: 1px solid rgba(33, 150, 243, 0.3);
+        min-height: 200px;
+        display: block;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .midi-controls {
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid rgba(33, 150, 243, 0.3);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .midi-debug-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+    }
+    
+    #midiPlayerInfo {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        color: #2c3e50;
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+        min-height: 60px;
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
     }
     
     /* Responsive Design */
@@ -477,6 +586,14 @@ const apiBase = "http://localhost:8000";
     let midiAccess;
     let midiInput;
     let midiRecorder;
+    
+    // MIDI Player variables
+    let midiPlayer;
+    let isMidiLooping = false;
+    let baseBPM = 100;
+    const defaultBPM = 120;
+    const beatsPerLoop = 16;
+    let midiCheckLoopInterval;
     
     // MIDI Recording Buffer - FRONTEND ONLY (No WebSockets!)
     class MidiRecorder {
@@ -792,8 +909,7 @@ const apiBase = "http://localhost:8000";
             console.log('🎵 Starting MIDI recording after count-in...');
             
             // Calculate much longer buffer time to ensure we capture everything
-            const tempoBPMSlider = document.getElementById('tempoBPM');
-            const currentTempo = tempoBPMSlider ? parseInt(tempoBPMSlider.value) : 100;
+            const currentTempo = 100; // Fixed tempo
             const beatsPerSecond = currentTempo / 60;
             const durationFor16Beats = 16 / beatsPerSecond;
             
@@ -1115,6 +1231,172 @@ const apiBase = "http://localhost:8000";
     pianoSynth = new PianoSynth();
     midiRecorder = new MidiRecorder();
 
+    // MIDI Player Functions
+    function initializeMidiPlayer() {
+        midiPlayer = document.getElementById('arrangementPlayer');
+        if (midiPlayer) {
+            console.log('🎵 MIDI Player initialized');
+            // Set playbackRate to match desired BPM (100) from default (120)
+            midiPlayer.playbackRate = baseBPM / defaultBPM;
+            updateMidiDebugInfo(`Playback rate: ${midiPlayer.playbackRate.toFixed(3)} for BPM ${baseBPM}`);
+            updateMidiDebugInfo(`16-beat loop duration: ${getMidiLoopEnd().toFixed(2)}s`);
+
+            midiPlayer.addEventListener('start', () => {
+                updateMidiDebugInfo('Playback started');
+                if (isMidiLooping) {
+                    if (midiCheckLoopInterval) clearInterval(midiCheckLoopInterval);
+                    midiCheckLoopInterval = setInterval(() => {
+                        if (midiPlayer.currentTime !== undefined) {
+                            const loopEnd = getMidiLoopEnd();
+                            const loopStart = getMidiLoopStart();
+                            // Trigger loop 200ms early to beat the stop
+                            if (midiPlayer.currentTime >= loopEnd - 0.2) {
+                                midiPlayer.currentTime = loopStart;
+                                setTimeout(() => {
+                                    if (!midiPlayer.playing) {
+                                        midiPlayer.start();
+                                        updateMidiDebugInfo('Player restarted after loop');
+                                    }
+                                }, 10); // Small delay to ensure time is set
+                                updateMidiDebugInfo(`Loop: ${midiPlayer.currentTime.toFixed(2)}s -> ${loopStart.toFixed(2)}s`);
+                            }
+                        }
+                    }, 5); // Check every 5ms for tighter control
+                }
+            });
+
+            midiPlayer.addEventListener('stop', () => {
+                updateMidiDebugInfo(`Stopped at ${midiPlayer.currentTime?.toFixed(2) || 'unknown'}s, Looping: ${isMidiLooping}`);
+                if (midiCheckLoopInterval) {
+                    clearInterval(midiCheckLoopInterval);
+                    midiCheckLoopInterval = null;
+                }
+            });
+        } else {
+            console.error('❌ No MIDI player found');
+            updateMidiDebugInfo('ERROR: MIDI player not found');
+        }
+    }
+
+    function getMidiLoopStart() {
+        return 0; // Always start from beginning
+    }
+
+    function getMidiLoopEnd() {
+        // Fixed 16-beat duration at 100 BPM
+        return (beatsPerLoop * 60) / baseBPM; // 9.6s for 16 beats at 100 BPM
+    }
+
+    function updateMidiDebugInfo(message) {
+        const info = document.getElementById('midiPlayerInfo');
+        if (info) {
+            const timestamp = new Date().toLocaleTimeString();
+            info.innerHTML += `[${timestamp}] ${message}<br>`;
+            info.scrollTop = info.scrollHeight;
+        }
+    }
+
+    function toggleMidiPlay() {
+        if (midiPlayer) {
+            if (midiPlayer.playing) {
+                midiPlayer.stop();
+            } else {
+                midiPlayer.start();
+            }
+        }
+    }
+
+    function stopMidi() {
+        if (midiPlayer) {
+            midiPlayer.stop();
+            midiPlayer.currentTime = 0;
+            updateMidiDebugInfo('Reset to start');
+        }
+    }
+
+    function toggleMidiLoop() {
+        isMidiLooping = !isMidiLooping;
+        document.getElementById('midiLoopStatus').textContent = `Loop: ${isMidiLooping ? 'ON' : 'OFF'}`;
+        updateMidiDebugInfo(`Looping: ${isMidiLooping ? 'ON' : 'OFF'}`);
+        
+        // Clear interval when looping is turned off
+        if (!isMidiLooping && midiCheckLoopInterval) {
+            clearInterval(midiCheckLoopInterval);
+            midiCheckLoopInterval = null;
+        }
+    }
+
+    // Completely robust showMidiPlayer function that eliminates ALL path issues
+    function showMidiPlayer(arrangementFilename) {
+        const midiPlayerSection = document.getElementById('midiPlayerSection');
+        const midiPlayer = document.getElementById('arrangementPlayer');
+        
+        if (midiPlayerSection && midiPlayer) {
+            // COMPLETELY strip everything and get just the filename
+            let justFilename = arrangementFilename;
+            
+            console.log('🔧 DEBUG: Original input:', justFilename);
+            
+            // Remove any URL protocols
+            justFilename = justFilename.replace(/^https?:\/\/[^\/]+/, '');
+            
+            // Remove any leading slashes
+            justFilename = justFilename.replace(/^\/+/, '');
+            
+            // If it contains ANY path separators, just get the last part (filename only)
+            if (justFilename.includes('/')) {
+                justFilename = justFilename.split('/').pop();
+            }
+            
+            // If it contains backslashes (Windows paths), get the last part
+            if (justFilename.includes('\\')) {
+                justFilename = justFilename.split('\\').pop();
+            }
+            
+            // Remove any remaining path prefixes
+            justFilename = justFilename.replace(/.*generated_arrangements[\/\\]/, '');
+            
+            // Final safety check - if it STILL has path separators, just get the last part
+            while (justFilename.includes('/') || justFilename.includes('\\')) {
+                justFilename = justFilename.split(/[\/\\]/).pop();
+            }
+            
+            // Construct the clean path - ONLY use the filename
+            const finalPath = `/generated_arrangements/${justFilename}`;
+            
+            console.log('🔧 DEBUG: Extracted filename:', justFilename);
+            console.log('🔧 DEBUG: Final path:', finalPath);
+            
+            // Set the source
+            midiPlayer.src = finalPath;
+            
+            // Show the player
+            midiPlayerSection.style.display = 'block';
+            
+            // Initialize player if not already done
+            initializeMidiPlayer();
+            
+            updateMidiDebugInfo(`Loaded: ${justFilename}`);
+            updateMidiDebugInfo(`Path: ${finalPath}`);
+            console.log('🎵 MIDI Player loaded:', finalPath);
+            
+            // Test if the file actually exists by making a fetch request
+            fetch(finalPath, { method: 'HEAD' })
+                .then(response => {
+                    if (response.ok) {
+                        updateMidiDebugInfo(`✅ File confirmed accessible`);
+                    } else {
+                        updateMidiDebugInfo(`❌ File not found (${response.status})`);
+                        console.error('File not accessible:', finalPath);
+                    }
+                })
+                .catch(error => {
+                    updateMidiDebugInfo(`❌ File check failed: ${error.message}`);
+                    console.error('Error checking file:', error);
+                });
+        }
+    }
+
     // Web MIDI API Functions
     async function loadDevices() {
         try {
@@ -1144,6 +1426,17 @@ const apiBase = "http://localhost:8000";
                     option.textContent = `${input.name}`;
                     select.appendChild(option);
                 });
+                
+                // AUTO-CONNECT: Automatically connect to the first available device
+                if (inputs.length > 0) {
+                    select.value = inputs[0].id;
+                    console.log('🎹 Auto-connecting to first MIDI device:', inputs[0].name);
+                    
+                    // Small delay to ensure UI is updated, then auto-connect
+                    setTimeout(() => {
+                        connectDevice();
+                    }, 100);
+                }
             }
             
             console.log('🎹 Found MIDI inputs:', inputs.length);
@@ -1165,6 +1458,13 @@ const apiBase = "http://localhost:8000";
         
         if (!deviceId || deviceId.includes('No MIDI') || deviceId.includes('Error') || deviceId.includes('Web MIDI')) {
             updateStatus('midiStatus', 'Please select a valid MIDI device', 'error');
+            return;
+        }
+        
+        // Safety check: ensure midiAccess exists and has inputs
+        if (!midiAccess || !midiAccess.inputs) {
+            console.log('🔄 MIDI access not ready, retrying in 200ms...');
+            setTimeout(() => connectDevice(), 200);
             return;
         }
         
@@ -1227,12 +1527,6 @@ const apiBase = "http://localhost:8000";
         }
     }
     
-    function testPianoSound() {
-        if (pianoSynth) {
-            pianoSynth.testSound();
-        }
-    }
-    
     // Recording Functions
     async function startCapture() {
         if (!midiInput) {
@@ -1240,13 +1534,9 @@ const apiBase = "http://localhost:8000";
             return;
         }
         
-        const enableMetronomeCheckbox = document.getElementById('enableMetronome');
-        const tempoBPMSlider = document.getElementById('tempoBPM');
-        
-        if (!enableMetronomeCheckbox || !tempoBPMSlider) return;
-        
-        const enableMetronome = enableMetronomeCheckbox.checked;
-        const tempo = parseInt(tempoBPMSlider.value);
+        // Use default values since we removed the UI controls
+        const enableMetronome = true; // Always enable metronome
+        const tempo = 100; // Fixed tempo at 100 BPM
         
         if (enableMetronome) {
             updateStatus('captureStatus', '🥁 Count-in starting... Get ready!', 'analyzing');
@@ -1274,9 +1564,8 @@ const apiBase = "http://localhost:8000";
             // Use predefined duration (from metronome)
             duration = predefinedDuration;
         } else {
-            // Calculate duration for manual start
-            const tempoBPMSlider = document.getElementById('tempoBPM');
-            const currentTempo = tempoBPMSlider ? parseInt(tempoBPMSlider.value) : 100;
+            // Calculate duration for manual start - use fixed tempo
+            const currentTempo = 100; // Fixed tempo
             const beatsPerSecond = currentTempo / 60;
             const durationFor16Beats = 16 / beatsPerSecond;
             duration = mode === 'time' ? durationFor16Beats + 1.0 : 30.0; // Add buffer for manual mode too
@@ -1289,10 +1578,27 @@ const apiBase = "http://localhost:8000";
         
         updateStatus('captureStatus', '🎵 Recording... Play your melody!', 'recording');
         
+        // **NEW: GUARANTEED AUTO-STOP after exactly 16 bars (9.6 seconds)**
+        const exactDurationFor16Bars = (16 * 60) / 100; // 16 beats at 100 BPM = 9.6 seconds
+        const autoStopTimeout = setTimeout(() => {
+            console.log('⏰ Auto-stopping recording after 16 bars (9.6s)');
+            stopCapture(); // This will stop both metronome and MIDI recorder
+        }, exactDurationFor16Bars * 1000); // Convert to milliseconds
+        
+        // Store the timeout ID so we can clear it if manually stopped
+        window.currentAutoStopTimeout = autoStopTimeout;
+        
         // Monitor recording status
         const statusInterval = setInterval(() => {
             if (!midiRecorder.isRecording) {
                 clearInterval(statusInterval);
+                
+                // Clear the auto-stop timeout since recording already stopped
+                if (window.currentAutoStopTimeout) {
+                    clearTimeout(window.currentAutoStopTimeout);
+                    window.currentAutoStopTimeout = null;
+                }
+                
                 const notes = midiRecorder.recordedNotes;
                 updateStatus('captureStatus', `✅ Recording finished! ${notes.length} MIDI events captured`, 'ready');
                 
@@ -1310,6 +1616,13 @@ const apiBase = "http://localhost:8000";
     }
     
     function stopCapture() {
+        // Clear the auto-stop timeout if it exists
+        if (window.currentAutoStopTimeout) {
+            clearTimeout(window.currentAutoStopTimeout);
+            window.currentAutoStopTimeout = null;
+            console.log('🛑 Cleared auto-stop timeout (manual stop)');
+        }
+        
         // Stop metronome
         if (metronome) {
             metronome.stop();
@@ -1405,62 +1718,7 @@ const apiBase = "http://localhost:8000";
         }
     }
     
-    // Analysis Functions (updated to use uploaded file results)
-    async function analyzeMelodyOnly() {
-        if (!window.uploadedMidiResult) {
-            updateStatus('analysisStatus', 'Please record a melody first', 'error');
-            return;
-        }
-        
-        const harmonySelect = document.getElementById('harmonyStyle');
-        if (!harmonySelect) return;
-        
-        const style = harmonySelect.value;
-        
-        updateStatus('analysisStatus', '🎵 Analyzing melody for chord progression...', 'analyzing');
-        
-        try {
-            // Use the already analyzed result from upload
-            const result = window.uploadedMidiResult;
-            
-            // Map harmonization styles to progressions from the upload result
-            const styleMap = {
-                "simple_pop": result.harmonizations.simple_pop,
-                "folk_acoustic": result.harmonizations.folk_acoustic,
-                "bass_foundation": result.harmonizations.bass_foundation,
-                "phrase_foundation": result.harmonizations.phrase_foundation
-            };
-            
-            const selectedHarmonization = styleMap[style];
-            
-            const melodyResult = {
-                success: true,
-                filename: result.filename,
-                key: result.key,
-                key_confidence: Math.max(
-                    result.harmonizations.simple_pop.confidence,
-                    result.harmonizations.folk_acoustic.confidence,
-                    result.harmonizations.bass_foundation.confidence,
-                    result.harmonizations.phrase_foundation.confidence
-                ) / 100,
-                selected_harmonization: {
-                    style: style,
-                    progression: selectedHarmonization.progression,
-                    confidence: selectedHarmonization.confidence
-                },
-                all_harmonizations: result.harmonizations,
-                visualization: null // No visualization for melody-only
-            };
-            
-            updateStatus('analysisStatus', '✅ Melody analysis complete!', 'ready');
-            displayMelodyResults(melodyResult);
-            
-        } catch (error) {
-            console.error('Error analyzing melody:', error);
-            updateStatus('analysisStatus', 'Melody analysis error - check server connection', 'error');
-        }
-    }
-    
+    // Also update analyzeAndGenerate to add more debugging
     async function analyzeAndGenerate() {
         if (!window.uploadedMidiResult) {
             updateStatus('analysisStatus', 'Please record a melody first', 'error');
@@ -1491,6 +1749,8 @@ const apiBase = "http://localhost:8000";
             
             const selectedProgression = styleMap[style];
             
+            console.log('🔧 Sending request with progression:', selectedProgression);
+            
             // Generate arrangement from the chord progression
             const response = await fetch(`${API_BASE}/generate/arrangement`, {
                 method: 'POST',
@@ -1505,9 +1765,22 @@ const apiBase = "http://localhost:8000";
                 })
             });
             
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Backend error response:', errorText);
+                throw new Error(`Server error: ${response.status} - ${errorText}`);
+            }
+            
             const arrangementResult = await response.json();
             
+            console.log('🔧 Backend response full object:', JSON.stringify(arrangementResult, null, 2));
+            console.log('🔧 Backend output_file field:', arrangementResult.output_file);
+            
             if (arrangementResult.output_file) {
+                // Pass the raw filename to showMidiPlayer - it will handle all cleaning
+                showMidiPlayer(arrangementResult.output_file);
+                
+                // Create result object for display
                 const fullResult = {
                     success: true,
                     key: result.key,
@@ -1518,53 +1791,25 @@ const apiBase = "http://localhost:8000";
                         result.harmonizations.phrase_foundation.confidence
                     ) / 100,
                     chord_progressions: styleMap,
-                    arrangement_file: arrangementResult.output_file.split('/').pop(), // Get filename only
+                    arrangement_file: arrangementResult.output_file.split('/').pop(), // Just filename for download link
                     visualization_file: null,
                     visualization_url: null
                 };
                 
                 updateStatus('analysisStatus', '✅ Analysis and arrangement complete!', 'ready');
                 displayFullResults(fullResult);
+                
             } else {
-                updateStatus('analysisStatus', `❌ ${arrangementResult.message || 'Arrangement generation failed'}`, 'error');
+                console.error('No output_file in response:', arrangementResult);
+                updateStatus('analysisStatus', `❌ ${arrangementResult.message || 'No arrangement file returned'}`, 'error');
             }
         } catch (error) {
-            console.error('Error analyzing and generating:', error);
-            updateStatus('analysisStatus', 'Analysis error - check server connection', 'error');
+            console.error('Error in analyzeAndGenerate:', error);
+            updateStatus('analysisStatus', `Analysis error: ${error.message}`, 'error');
         }
     }
     
     // Display Functions
-    function displayMelodyResults(result) {
-        const resultsSection = document.getElementById('results');
-        const keyInfo = document.getElementById('keyInfo');
-        const progressions = document.getElementById('progressions');
-        const arrangementLink = document.getElementById('arrangementLink');
-        const visualizationLink = document.getElementById('visualizationLink');
-        
-        if (!resultsSection || !keyInfo || !progressions || !arrangementLink || !visualizationLink) return;
-        
-        resultsSection.style.display = 'block';
-        
-        keyInfo.innerHTML = 
-            `<strong>Detected Key:</strong> ${result.key} (confidence: ${result.key_confidence.toFixed(2)})`;
-        
-        let progressionsHtml = '<h4>Chord Progressions:</h4>';
-        Object.entries(result.all_harmonizations).forEach(([style, data]) => {
-            const isSelected = style === result.selected_harmonization.style;
-            const highlight = isSelected ? 'style="background: #ffffcc; padding: 10px; border-radius: 8px;"' : '';
-            progressionsHtml += `<div ${highlight}>
-                <strong>${style}${isSelected ? ' (Selected)' : ''}:</strong> 
-                <div class="chord-progression">${data.progression.join(' → ')}</div>
-                <small>Confidence: ${data.confidence.toFixed(1)}%</small>
-            </div>`;
-        });
-        progressions.innerHTML = progressionsHtml;
-        
-        arrangementLink.innerHTML = '<em>No arrangement generated (melody analysis only)</em>';
-        visualizationLink.innerHTML = '';
-    }
-    
     function displayFullResults(result) {
         const resultsSection = document.getElementById('results');
         const keyInfo = document.getElementById('keyInfo');
@@ -1590,7 +1835,7 @@ const apiBase = "http://localhost:8000";
         
         if (result.arrangement_file) {
             arrangementLink.innerHTML = 
-                `<strong>Generated Arrangement:</strong> <a href="${API_BASE}/download/${result.arrangement_file}" download>📥 Download MIDI (${result.arrangement_file})</a>`;
+                `<strong>Generated Arrangement:</strong> <a href="/generated_arrangements/${result.arrangement_file}" download>📥 Download MIDI (${result.arrangement_file})</a>`;
         } else {
             arrangementLink.innerHTML = '<em>No arrangement file generated</em>';
         }
@@ -1614,12 +1859,11 @@ const apiBase = "http://localhost:8000";
     
     // Event Listeners
     document.addEventListener('DOMContentLoaded', function() {
+        connectDevice()
         const bassComplexity = document.getElementById('bassComplexity');
         const drumComplexity = document.getElementById('drumComplexity');
-        const tempoBPM = document.getElementById('tempoBPM');
         const bassValue = document.getElementById('bassValue');
         const drumValue = document.getElementById('drumValue');
-        const tempoValue = document.getElementById('tempoValue');
         
         if (bassComplexity && bassValue) {
             bassComplexity.addEventListener('input', function(e) {
@@ -1630,12 +1874,6 @@ const apiBase = "http://localhost:8000";
         if (drumComplexity && drumValue) {
             drumComplexity.addEventListener('input', function(e) {
                 drumValue.textContent = e.target.value;
-            });
-        }
-        
-        if (tempoBPM && tempoValue) {
-            tempoBPM.addEventListener('input', function(e) {
-                tempoValue.textContent = e.target.value;
             });
         }
         
@@ -1681,21 +1919,22 @@ const apiBase = "http://localhost:8000";
                 e.preventDefault();
                 stopCapture();
             }
-            if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
                 e.preventDefault();
-                analyzeMelodyOnly();
+                analyzeAndGenerate();
             }
         });
     });
 
     // Make functions globally accessible for onclick handlers
-    (window as any).connectDevice = connectDevice;
-    (window as any).loadDevices = loadDevices;
-    (window as any).startCapture = startCapture;
-    (window as any).stopCapture = stopCapture;
-    (window as any).analyzeMelodyOnly = analyzeMelodyOnly;
-    (window as any).analyzeAndGenerate = analyzeAndGenerate;
-    (window as any).testPianoSound = testPianoSound;
+    window.connectDevice = connectDevice;
+    window.loadDevices = loadDevices;
+    window.startCapture = startCapture;
+    window.stopCapture = stopCapture;
+    window.analyzeAndGenerate = analyzeAndGenerate;
+    window.toggleMidiPlay = toggleMidiPlay;
+    window.stopMidi = stopMidi;
+    window.toggleMidiLoop = toggleMidiLoop;
 </script>
 </body>
 </html>

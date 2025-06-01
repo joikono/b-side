@@ -291,7 +291,7 @@
         
 #         # Create NoteSequence
 #         sequence = note_seq.NoteSequence()
-#         sequence.tempos.add(qpm=120)  # Default tempo
+#         sequence.tempos.add(qpm=100)  # Default tempo
 #         sequence.ticks_per_quarter = 220
         
 #         # Track note on/off events

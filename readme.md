@@ -1,6 +1,6 @@
 pip install -r requirements.txt
 
-tidy up and make midi play in browser.
+tidy up and make stop button reset recording and remove reverb slider and start doing Whisper/Teachable Machine.
 
 
 
