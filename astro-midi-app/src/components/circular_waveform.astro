@@ -1,0 +1,699 @@
+---
+// src/components/circular_waveform.astro
+export interface Props {
+  width?: string;
+  height?: string;
+  barCount?: number;
+  radius?: number;
+  maxBarHeight?: number;
+  showControls?: boolean;
+  autoStart?: boolean;
+  className?: string;
+}
+
+const { 
+  width = "100%", 
+  height = "400px",
+  barCount = 128,
+  radius = 25,
+  maxBarHeight = 20,
+  showControls = true,
+  autoStart = false,
+  className = ""
+} = Astro.props;
+---
+
+<div class={`circular-spectrum-container ${className}`}>
+  <!-- Three.js Canvas -->
+  <canvas class="spectrum-canvas"></canvas>
+  
+  <!-- Loading Indicator -->
+  <div class="spectrum-loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Loading Audio Spectrum...</div>
+  </div>
+  
+  <!-- Controls (if enabled) -->
+  {showControls && (
+    <div class="spectrum-controls">
+      <div class="control-group">
+        <button class="spectrum-btn spectrum-btn-tone" title="Play Test Tone">Test Tone</button>
+        <button class="spectrum-btn spectrum-btn-mic" title="Use Microphone">Microphone Mode</button>
+        <button class="spectrum-btn spectrum-btn-stop" title="Stop Audio" style="display: none;">Stop</button>
+      </div>
+      
+      <div class="spectrum-status">
+        <div class="status-indicator">
+          <span class="status-dot"></span>
+          <span class="status-text">Ready</span>
+        </div>
+      </div>
+    </div>
+  )}
+  
+  <!-- Hidden file input for future use -->
+  <input type="file" class="spectrum-file-input" accept="audio/*" style="display: none;">
+</div>
+
+<style>
+  .circular-spectrum-container {
+    position: relative;
+    width: v-bind(width);
+    height: v-bind(height);
+    background: var(--spectrum-bg, linear-gradient(135deg, #0a0a1a 0%, #1a0a1a 100%));
+    border-radius: var(--spectrum-border-radius, 12px);
+    overflow: hidden;
+    border: var(--spectrum-border, 1px solid #333);
+    box-shadow: var(--spectrum-shadow, 0 8px 32px rgba(0, 0, 0, 0.3));
+  }
+  
+  .spectrum-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: transparent;
+  }
+  
+  .spectrum-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--spectrum-loading-color, #4ecdc4);
+    z-index: 10;
+  }
+  
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(78, 205, 196, 0.3);
+    border-top: 3px solid var(--spectrum-accent, #4ecdc4);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px;
+  }
+  
+  .loading-text {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .spectrum-controls {
+    position: absolute;
+    top: var(--spectrum-controls-top, 16px);
+    left: var(--spectrum-controls-left, 16px);
+    right: var(--spectrum-controls-right, auto);
+    bottom: var(--spectrum-controls-bottom, auto);
+    background: var(--spectrum-controls-bg, rgba(0, 0, 0, 0.7));
+    backdrop-filter: blur(10px);
+    border-radius: var(--spectrum-controls-radius, 8px);
+    padding: var(--spectrum-controls-padding, 12px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 20;
+  }
+  
+  .control-group {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .spectrum-btn {
+    background: var(--spectrum-btn-bg, rgba(255, 255, 255, 0.1));
+    border: var(--spectrum-btn-border, 1px solid rgba(255, 255, 255, 0.2));
+    color: var(--spectrum-btn-color, white);
+    padding: var(--spectrum-btn-padding, 8px 12px);
+    border-radius: var(--spectrum-btn-radius, 6px);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 16px;
+    min-width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .spectrum-btn:hover {
+    background: var(--spectrum-btn-hover-bg, rgba(255, 255, 255, 0.2));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+  
+  .spectrum-btn:active {
+    transform: translateY(0);
+  }
+  
+  .spectrum-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .spectrum-btn-tone {
+    background: var(--spectrum-tone-btn-bg, rgba(78, 205, 196, 0.2));
+    border-color: var(--spectrum-tone-btn-border, rgba(78, 205, 196, 0.4));
+  }
+  
+  .spectrum-btn-tone:hover {
+    background: var(--spectrum-tone-btn-hover, rgba(78, 205, 196, 0.3));
+  }
+  
+  .spectrum-btn-mic {
+    background: var(--spectrum-mic-btn-bg, rgba(52, 152, 219, 0.2));
+    border-color: var(--spectrum-mic-btn-border, rgba(52, 152, 219, 0.4));
+  }
+  
+  .spectrum-btn-mic:hover {
+    background: var(--spectrum-mic-btn-hover, rgba(52, 152, 219, 0.3));
+  }
+  
+  .spectrum-btn-stop {
+    background: var(--spectrum-stop-btn-bg, rgba(231, 76, 60, 0.2));
+    border-color: var(--spectrum-stop-btn-border, rgba(231, 76, 60, 0.4));
+  }
+  
+  .spectrum-btn-stop:hover {
+    background: var(--spectrum-stop-btn-hover, rgba(231, 76, 60, 0.3));
+  }
+  
+  .spectrum-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--spectrum-status-color, #aaa);
+  }
+  
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--spectrum-status-dot, #666);
+    transition: background-color 0.3s ease;
+  }
+  
+  .status-dot.active {
+    background: var(--spectrum-status-active, #4ecdc4);
+    box-shadow: 0 0 10px rgba(78, 205, 196, 0.4);
+  }
+  
+  .status-text {
+    font-weight: 500;
+  }
+  
+  
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .spectrum-controls {
+      position: static;
+      margin: 8px;
+      width: calc(100% - 16px);
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .control-group {
+      gap: 6px;
+    }
+    
+    .spectrum-btn {
+      padding: 6px 10px;
+      font-size: 14px;
+      min-width: 36px;
+    }
+  }
+  
+  /* CSS Custom Properties for Easy Theming */
+  :root {
+    /* Background & Container */
+    --spectrum-bg: linear-gradient(135deg, #0a0a1a 0%, #1a0a1a 100%);
+    --spectrum-border: 1px solid #333;
+    --spectrum-border-radius: 12px;
+    --spectrum-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    
+    /* Colors */
+    --spectrum-accent: #010505;
+    --spectrum-loading-color: #4ecdc4;
+    --spectrum-status-color: #aaa;
+    --spectrum-status-dot: #666;
+    --spectrum-status-active: #4ecdc4;
+    
+    /* Controls */
+    --spectrum-controls-bg: rgba(0, 0, 0, 0.7);
+    --spectrum-controls-radius: 8px;
+    --spectrum-controls-padding: 12px;
+    --spectrum-controls-top: 16px;
+    --spectrum-controls-left: 16px;
+    
+    /* Buttons */
+    --spectrum-btn-bg: rgba(255, 255, 255, 0.1);
+    --spectrum-btn-border: 1px solid rgba(255, 255, 255, 0.2);
+    --spectrum-btn-color: white;
+    --spectrum-btn-padding: 8px 12px;
+    --spectrum-btn-radius: 6px;
+    --spectrum-btn-hover-bg: rgba(255, 255, 255, 0.2);
+    
+    /* Specific Button Colors */
+    --spectrum-tone-btn-bg: rgba(78, 205, 196, 0.2);
+    --spectrum-tone-btn-border: rgba(78, 205, 196, 0.4);
+    --spectrum-tone-btn-hover: rgba(78, 205, 196, 0.3);
+    
+    --spectrum-mic-btn-bg: rgba(52, 152, 219, 0.2);
+    --spectrum-mic-btn-border: rgba(52, 152, 219, 0.4);
+    --spectrum-mic-btn-hover: rgba(52, 152, 219, 0.3);
+    
+    --spectrum-stop-btn-bg: rgba(231, 76, 60, 0.2);
+    --spectrum-stop-btn-border: rgba(231, 76, 60, 0.4);
+    --spectrum-stop-btn-hover: rgba(231, 76, 60, 0.3);
+  }
+</style>
+
+<script define:vars={{ barCount, radius, maxBarHeight, autoStart }}>
+  class CircularSpectrum {
+    constructor(container) {
+      this.container = container;
+      this.canvas = container.querySelector('.spectrum-canvas');
+      this.loadingElement = container.querySelector('.spectrum-loading');
+      
+      // Configuration from Astro props
+      this.config = {
+        barCount: barCount,
+        radius: radius,
+        maxBarHeight: maxBarHeight,
+        autoStart: autoStart
+      };
+      
+      // Three.js components
+      this.scene = null;
+      this.camera = null;
+      this.renderer = null;
+      this.circularBars = [];
+      this.centerCircle = null;
+      this.outerRing = null;
+      
+      // Audio components
+      this.audioContext = null;
+      this.analyser = null;
+      this.dataArray = null;
+      this.audioSource = null;
+      
+      // State
+      this.isAudioActive = false;
+      this.animationId = null;
+      this.isInitialized = false;
+      
+      this.init();
+    }
+    
+    async init() {
+      try {
+        await this.loadThreeJS();
+        this.setupThreeJS();
+        this.createVisualization();
+        this.setupEventListeners();
+        this.startAnimation();
+        this.updateStatus('Ready');
+        this.hideLoading();
+        this.isInitialized = true;
+        
+        if (this.config.autoStart) {
+          await this.startTestTone();
+        }
+        
+      } catch (error) {
+        console.error('CircularSpectrum initialization failed:', error);
+        this.updateStatus('Error');
+        this.showError(error.message);
+      }
+    }
+    
+    async loadThreeJS() {
+      if (window.THREE) return;
+      
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Three.js'));
+        document.head.appendChild(script);
+      });
+    }
+    
+    setupThreeJS() {
+      // Scene
+      this.scene = new THREE.Scene();
+      this.scene.background = new THREE.Color(0x0a0a1a);
+      
+      // Camera - Top-down view
+      const width = this.canvas.clientWidth;
+      const height = this.canvas.clientHeight;
+      
+      this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+      this.camera.position.set(0, 80, 0); // Top-down position
+      this.camera.lookAt(0, 0, 0);
+      
+      // Renderer
+      this.renderer = new THREE.WebGLRenderer({ 
+        canvas: this.canvas,
+        antialias: true,
+        alpha: true
+      });
+      this.renderer.setSize(width, height);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    }
+    
+    createVisualization() {
+      // Create frequency bars
+      this.circularBars = [];
+      
+      for (let i = 0; i < this.config.barCount; i++) {
+        const geometry = new THREE.BoxGeometry(0.8, 1, 0.8);
+        const hue = (i / this.config.barCount);
+        const material = new THREE.MeshBasicMaterial({ 
+          color: new THREE.Color().setHSL(hue, 0.7, 0.6),
+          transparent: true,
+          opacity: 0.8
+        });
+        const bar = new THREE.Mesh(geometry, material);
+        
+        const angle = (i / this.config.barCount) * Math.PI * 2;
+        bar.position.x = Math.cos(angle) * this.config.radius;
+        bar.position.z = Math.sin(angle) * this.config.radius;
+        bar.position.y = 0;
+        
+        this.scene.add(bar);
+        this.circularBars.push(bar);
+      }
+      
+      // Center circle
+      const centerGeometry = new THREE.CircleGeometry(3, 32);
+      const centerMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x4ecdc4,
+        transparent: true,
+        opacity: 0.3
+      });
+      this.centerCircle = new THREE.Mesh(centerGeometry, centerMaterial);
+      this.centerCircle.rotation.x = -Math.PI / 2; // Lay flat
+      this.scene.add(this.centerCircle);
+      
+      // Outer ring
+      const ringGeometry = new THREE.RingGeometry(this.config.radius - 1, this.config.radius + 1, 64);
+      const ringMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x333333,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.DoubleSide
+      });
+      this.outerRing = new THREE.Mesh(ringGeometry, ringMaterial);
+      this.outerRing.rotation.x = -Math.PI / 2; // Lay flat
+      this.scene.add(this.outerRing);
+    }
+    
+    setupEventListeners() {
+      const toneBtn = this.container.querySelector('.spectrum-btn-tone');
+      const micBtn = this.container.querySelector('.spectrum-btn-mic');
+      const stopBtn = this.container.querySelector('.spectrum-btn-stop');
+      
+      if (toneBtn) {
+        toneBtn.addEventListener('click', () => this.startTestTone());
+      }
+      
+      if (micBtn) {
+        micBtn.addEventListener('click', () => this.startMicrophone());
+      }
+      
+      if (stopBtn) {
+        stopBtn.addEventListener('click', () => this.stopAudio());
+      }
+      
+      // Handle resize
+      this.handleResize = () => {
+        if (!this.camera || !this.renderer) return;
+        
+        const width = this.canvas.clientWidth;
+        const height = this.canvas.clientHeight;
+        
+        this.camera.aspect = width / height;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(width, height);
+      };
+      
+      window.addEventListener('resize', this.handleResize);
+    }
+    
+    async startTestTone() {
+      try {
+        await this.initAudioAnalysis('tone');
+        this.updateStatus('Test Tone Active');
+      } catch (error) {
+        console.error('Test tone failed:', error);
+        this.updateStatus('Error');
+      }
+    }
+    
+    async startMicrophone() {
+      try {
+        await this.initAudioAnalysis('microphone');
+        this.updateStatus('Microphone Active');
+      } catch (error) {
+        console.error('Microphone failed:', error);
+        this.updateStatus('Microphone Error');
+        alert('Microphone access failed: ' + error.message);
+      }
+    }
+    
+    async initAudioAnalysis(source) {
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+      }
+      
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 512;
+      this.analyser.smoothingTimeConstant = 0.8;
+      
+      let audioSource;
+      
+      if (source === 'microphone') {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioSource = this.audioContext.createMediaStreamSource(stream);
+      } else if (source === 'tone') {
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, this.audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(this.analyser);
+        this.analyser.connect(this.audioContext.destination);
+        
+        oscillator.start();
+        audioSource = oscillator;
+      }
+      
+      if (audioSource && source !== 'tone') {
+        audioSource.connect(this.analyser);
+        this.analyser.connect(this.audioContext.destination);
+      }
+      
+      this.audioSource = audioSource;
+      this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+      this.isAudioActive = true;
+      
+      this.showStopButton();
+      this.setStatusActive(true);
+    }
+    
+    stopAudio() {
+      if (this.audioSource && this.audioSource.stop) {
+        this.audioSource.stop();
+      }
+      
+      if (this.audioContext) {
+        this.audioContext.close();
+        this.audioContext = null;
+      }
+      
+      this.isAudioActive = false;
+      this.analyser = null;
+      this.dataArray = null;
+      this.audioSource = null;
+      
+      this.hideStopButton();
+      this.setStatusActive(false);
+      this.updateStatus('Ready');
+    }
+    
+    startAnimation() {
+      const animate = () => {
+        this.animationId = requestAnimationFrame(animate);
+        
+        if (this.isAudioActive && this.analyser && this.dataArray && this.circularBars.length > 0) {
+          this.analyser.getByteFrequencyData(this.dataArray);
+          this.updateVisualization();
+        }
+        
+        if (this.renderer && this.scene && this.camera) {
+          this.renderer.render(this.scene, this.camera);
+        }
+      };
+      
+      animate();
+    }
+    
+    updateVisualization() {
+      // Update frequency bars
+      this.circularBars.forEach((bar, i) => {
+        const dataIndex = Math.floor((i / this.config.barCount) * this.dataArray.length);
+        const value = this.dataArray[dataIndex] / 255;
+        const height = Math.max(0.1, value * this.config.maxBarHeight);
+        
+        bar.scale.y = height;
+        bar.position.y = height / 2;
+        bar.material.opacity = 0.4 + value * 0.6;
+      });
+      
+      // Update center circle
+      if (this.centerCircle) {
+        const bassLevel = this.dataArray.slice(0, 16).reduce((a, b) => a + b) / 16 / 255;
+        this.centerCircle.scale.setScalar(1 + bassLevel * 2);
+        this.centerCircle.material.opacity = 0.2 + bassLevel * 0.5;
+      }
+      
+      // Rotate outer ring
+      if (this.outerRing) {
+        this.outerRing.rotation.z += 0.005;
+      }
+    }
+    
+    // Public API methods
+    connectAudioElement(audioElement) {
+      if (audioElement && this.audioContext) {
+        try {
+          const source = this.audioContext.createMediaElementSource(audioElement);
+          source.connect(this.analyser);
+          this.analyser.connect(this.audioContext.destination);
+          this.audioSource = source;
+          this.isAudioActive = true;
+          this.showStopButton();
+          this.setStatusActive(true);
+          this.updateStatus('Audio Connected');
+          return true;
+        } catch (error) {
+          console.error('Failed to connect audio element:', error);
+          return false;
+        }
+      }
+      return false;
+    }
+    
+    setTheme(theme) {
+      // Apply theme to bars
+      this.circularBars.forEach((bar, i) => {
+        if (theme.colorMode === 'single') {
+          bar.material.color.setHex(theme.primaryColor || 0x4ecdc4);
+        } else if (theme.colorMode === 'rainbow') {
+          const hue = (i / this.config.barCount);
+          bar.material.color.setHSL(hue, 0.7, 0.6);
+        }
+      });
+      
+      // Apply theme to center and ring
+      if (this.centerCircle && theme.accentColor) {
+        this.centerCircle.material.color.setHex(theme.accentColor);
+      }
+    }
+    
+    // UI Helper Methods
+    updateStatus(text) {
+      const statusText = this.container.querySelector('.status-text');
+      if (statusText) {
+        statusText.textContent = text;
+      }
+    }
+    
+    setStatusActive(active) {
+      const statusDot = this.container.querySelector('.status-dot');
+      if (statusDot) {
+        statusDot.classList.toggle('active', active);
+      }
+    }
+    
+    showStopButton() {
+      const stopBtn = this.container.querySelector('.spectrum-btn-stop');
+      if (stopBtn) {
+        stopBtn.style.display = 'flex';
+      }
+    }
+    
+    hideStopButton() {
+      const stopBtn = this.container.querySelector('.spectrum-btn-stop');
+      if (stopBtn) {
+        stopBtn.style.display = 'none';
+      }
+    }
+    
+    hideLoading() {
+      if (this.loadingElement) {
+        this.loadingElement.style.display = 'none';
+      }
+    }
+    
+    showError(message) {
+      if (this.loadingElement) {
+        this.loadingElement.innerHTML = `
+          <div style="color: #e74c3c; font-size: 14px;">
+            ⚠️ Error: ${message}
+          </div>
+        `;
+      }
+    }
+    
+    destroy() {
+      if (this.animationId) {
+        cancelAnimationFrame(this.animationId);
+      }
+      
+      this.stopAudio();
+      
+      window.removeEventListener('resize', this.handleResize);
+      
+      if (this.renderer) {
+        this.renderer.dispose();
+      }
+    }
+  }
+  
+  // Initialize when DOM is ready
+  document.addEventListener('DOMContentLoaded', () => {
+    const containers = document.querySelectorAll('.circular-spectrum-container');
+    
+    containers.forEach(container => {
+      const spectrum = new CircularSpectrum(container);
+      
+      // Store instance for external access
+      container.spectrumInstance = spectrum;
+    });
+  });
+  
+  // Expose class globally for external integration
+  window.CircularSpectrum = CircularSpectrum;
+</script>

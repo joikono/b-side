@@ -3,6 +3,7 @@
 // Perfect audio quality with Web MIDI API + Web Audio API + MIDI Playback
 const title = "🎹 Live MIDI Analysis Demo";
 const apiBase = "http://localhost:8000";
+import CircularWaveform from '../components/circular_waveform.astro';
 ---
 
 <html lang="en">
@@ -32,8 +33,8 @@ const apiBase = "http://localhost:8000";
             <div id="pianoControls" style="display: none; margin-top: 15px;">
                 <label>
                     Piano Volume: 
-                    <input type="range" id="pianoVolume" min="0" max="100" value="20">
-                    <span id="volumeValue">20%</span>
+                    <input type="range" id="pianoVolume" min="0" max="100" value="15">
+                    <span id="volumeValue">15%</span>
                 </label>
                 <br>
                 <label>
@@ -46,11 +47,25 @@ const apiBase = "http://localhost:8000";
                     </select>
                 </label>
                 <br>
-                <label>
-                    Reverb Amount: 
-                    <input type="range" id="reverbAmount" min="0" max="100" value="15">
-                    <span id="reverbValue">15%</span>
-                </label>
+            </div>
+        </section>
+        <!-- NEW: Dedicated Audio Visualizer Section -->
+        <section class="section visualizer-section">
+            <h3>🌊 Real-time Audio Visualizer</h3>
+            <p>Live visualization of your MIDI performance - connect a device and start playing!</p>
+            
+            <div class="visualizer-container">
+                <CircularWaveform 
+                    height="320px" 
+                    showControls={false}
+                    className="midi-spectrum main-visualizer"
+                />
+                
+                <div class="visualizer-status" id="visualizerStatus">
+                    <span class="status-dot" id="audioStatusDot"></span>
+                    <span id="audioStatusText">Waiting for MIDI connection...</span>
+                    <button onclick="retryVisualizerConnection()" id="retryBtn" style="display: none;">🔄 Retry</button>
+                </div>
             </div>
         </section>
         
@@ -98,11 +113,7 @@ const apiBase = "http://localhost:8000";
                         sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
                         visualizer="#myVisualizer"
                         loop>
-                    </midi-player>
-                    
-                    <!-- Visual piano roll -->
-                    <midi-visualizer type="piano-roll" id="myVisualizer"></midi-visualizer>
-                    
+                    </midi-player>                
                     <!-- Custom controls for the player -->
                     <div class="midi-controls">
                         <div class="button-row">
@@ -574,6 +585,17 @@ const apiBase = "http://localhost:8000";
         margin-right: 8px;
         cursor: pointer;
     }
+
+    /* MIDI Spectrum Integration */
+    .midi-spectrum {
+    --spectrum-accent: #ff9500;
+    --spectrum-bg: linear-gradient(135deg, #1a0a2e 0%, #16213e 100%);
+    border: 1px solid rgba(255, 149, 0, 0.3);
+    }
+
+    .midi-spectrum .circular-spectrum-container {
+    border-radius: 8px;
+    }
 </style>
 
 <script>
@@ -586,6 +608,7 @@ const apiBase = "http://localhost:8000";
     let midiAccess;
     let midiInput;
     let midiRecorder;
+    let spectrumInstance = null;
     
     // MIDI Player variables
     let midiPlayer;
@@ -594,7 +617,211 @@ const apiBase = "http://localhost:8000";
     const defaultBPM = 120;
     const beatsPerLoop = 16;
     let midiCheckLoopInterval;
-    
+
+    // Visualizer Functions
+    function retryVisualizerConnection() {
+        console.log('🔄 Manual retry requested');
+        updateVisualizerStatus('waiting', 'Retrying connection...');
+        spectrumInstance = null;
+        
+        setTimeout(() => {
+            if (connectMidiToSpectrum()) {
+                console.log('✅ Manual retry successful');
+            } else {
+                console.log('❌ Manual retry failed');
+                updateVisualizerStatus('error', 'Manual retry failed - check console');
+            }
+        }, 500);
+    }
+
+    function updateVisualizerStatus(status, message) {
+        const statusDot = document.getElementById('audioStatusDot');
+        const statusText = document.getElementById('audioStatusText');
+        const retryBtn = document.getElementById('retryBtn');
+        
+        if (statusDot && statusText) {
+            statusDot.classList.remove('connected', 'active');
+            
+            switch (status) {
+                case 'connected':
+                    statusDot.classList.add('connected');
+                    if (retryBtn) retryBtn.style.display = 'none';
+                    break;
+                case 'active':
+                    statusDot.classList.add('active');
+                    if (retryBtn) retryBtn.style.display = 'none';
+                    break;
+                case 'error':
+                    if (retryBtn) retryBtn.style.display = 'inline-block';
+                    break;
+                case 'waiting':
+                default:
+                    if (retryBtn) retryBtn.style.display = 'none';
+                    break;
+            }
+            
+            statusText.textContent = message;
+        }
+    }
+
+    function connectMidiToSpectrum() {
+        console.log('🔍 Starting connectMidiToSpectrum...');
+        
+        if (!spectrumInstance) {
+            const containers = document.querySelectorAll('.circular-spectrum-container');
+            console.log('🔍 Found spectrum containers:', containers.length);
+            
+            for (let i = 0; i < containers.length; i++) {
+                const container = containers[i];
+                if (container.spectrumInstance) {
+                    spectrumInstance = container.spectrumInstance;
+                    console.log('✅ Found spectrum instance in container', i);
+                    break;
+                }
+            }
+        }
+        
+        if (!spectrumInstance || !pianoSynth || !pianoSynth.audioContext) {
+            const missing = [];
+            if (!spectrumInstance) missing.push('spectrumInstance');
+            if (!pianoSynth) missing.push('pianoSynth');
+            if (!pianoSynth?.audioContext) missing.push('audioContext');
+            
+            console.log('⏳ Missing components:', missing);
+            updateVisualizerStatus('waiting', `Missing: ${missing.join(', ')}`);
+            return false;
+        }
+        
+        try {
+            const tapGain = pianoSynth.audioContext.createGain();
+            tapGain.gain.value = 1.0;
+            
+            pianoSynth.masterGain.connect(tapGain);
+            
+            if (!spectrumInstance.audioContext) {
+                spectrumInstance.audioContext = pianoSynth.audioContext;
+            }
+            
+            if (!spectrumInstance.analyser) {
+                spectrumInstance.analyser = pianoSynth.audioContext.createAnalyser();
+                spectrumInstance.analyser.fftSize = 512;
+                spectrumInstance.analyser.smoothingTimeConstant = 0.8;
+            }
+            
+            tapGain.connect(spectrumInstance.analyser);
+            spectrumInstance.dataArray = new Uint8Array(spectrumInstance.analyser.frequencyBinCount);
+            spectrumInstance.isAudioActive = true;
+            
+            if (typeof spectrumInstance.setStatusActive === 'function') {
+                spectrumInstance.setStatusActive(true);
+            }
+            
+            if (typeof spectrumInstance.updateStatus === 'function') {
+                spectrumInstance.updateStatus('MIDI Connected');
+            }
+            
+            updateVisualizerStatus('connected', 'MIDI audio connected - play some notes!');
+            console.log('🎹 MIDI audio connected to spectrum successfully');
+            return true;
+            
+        } catch (error) {
+            console.error('❌ Failed to connect MIDI to spectrum:', error);
+            updateVisualizerStatus('error', `Connection failed: ${error.message}`);
+            return false;
+        }
+    }
+
+    function findSpectrumInstance(attempt = 1) {
+        console.log(`🔍 Spectrum detection attempt ${attempt}...`);
+        
+        const containers = document.querySelectorAll('.circular-spectrum-container');
+        console.log(`🔍 Found ${containers.length} spectrum containers`);
+        
+        for (let i = 0; i < containers.length; i++) {
+            const container = containers[i];
+            if (container.spectrumInstance) {
+                spectrumInstance = container.spectrumInstance;
+                console.log('🌊 Spectrum instance found and ready for MIDI connection');
+                updateVisualizerStatus('waiting', 'Spectrum ready - connect MIDI device');
+                return true;
+            }
+        }
+        
+        if (attempt < 5) {
+            console.log(`⏳ Spectrum not ready, retry ${attempt + 1}/5 in 1 second...`);
+            updateVisualizerStatus('waiting', `Loading visualizer... (${attempt}/5)`);
+            setTimeout(() => findSpectrumInstance(attempt + 1), 1000);
+        } else {
+            console.log('❌ Spectrum instance not found after 5 attempts');
+            updateVisualizerStatus('error', 'Visualizer failed to load - try refresh');
+        }
+        
+        return false;
+    }
+
+    async function connectDevice() {
+        const deviceSelect = document.getElementById('deviceSelect');
+        if (!deviceSelect) return;
+        
+        const deviceId = deviceSelect.value;
+        
+        if (!deviceId || deviceId.includes('No MIDI') || deviceId.includes('Error') || deviceId.includes('Web MIDI')) {
+            updateStatus('midiStatus', 'Please select a valid MIDI device', 'error');
+            return;
+        }
+        
+        if (!midiAccess || !midiAccess.inputs) {
+            console.log('🔄 MIDI access not ready, retrying in 200ms...');
+            setTimeout(() => connectDevice(), 200);
+            return;
+        }
+        
+        try {
+            await pianoSynth.init();
+            
+            const input = Array.from(midiAccess.inputs.values()).find(inp => inp.id === deviceId);
+            
+            if (!input) {
+                updateStatus('midiStatus', 'Selected MIDI device not found', 'error');
+                return;
+            }
+            
+            input.onmidimessage = handleMIDIMessage;
+            midiInput = input;
+            
+            updateStatus('midiStatus', '🎹 Piano connected! Studio-quality audio enabled', 'ready');
+            
+            const pianoControls = document.getElementById('pianoControls');
+            if (pianoControls) {
+                pianoControls.style.display = 'block';
+            }
+            
+            console.log('🎹 Connected to MIDI device:', input.name);
+
+            // Connect to visualizer
+            updateVisualizerStatus('waiting', 'Connecting to visualizer...');
+            
+            setTimeout(() => {
+                if (!connectMidiToSpectrum()) {
+                    setTimeout(() => {
+                        if (!connectMidiToSpectrum()) {
+                            setTimeout(() => {
+                                if (!connectMidiToSpectrum()) {
+                                    updateVisualizerStatus('error', 'Visualizer connection failed - MIDI audio still works');
+                                }
+                            }, 2000);
+                        }
+                    }, 1000);
+                }
+            }, 500);
+            
+        } catch (error) {
+            console.error('Error connecting to MIDI device:', error);
+            updateStatus('midiStatus', 'Failed to connect to MIDI device', 'error');
+        }
+    }
+
+
     // MIDI Recording Buffer - FRONTEND ONLY (No WebSockets!)
     class MidiRecorder {
         constructor() {
@@ -757,7 +984,7 @@ const apiBase = "http://localhost:8000";
             ];
         }
     }
-    
+
     // Metronome Class using Web Audio API
     class Metronome {
         constructor() {
@@ -1450,56 +1677,6 @@ const apiBase = "http://localhost:8000";
         }
     }
     
-    async function connectDevice() {
-        const deviceSelect = document.getElementById('deviceSelect');
-        if (!deviceSelect) return;
-        
-        const deviceId = deviceSelect.value;
-        
-        if (!deviceId || deviceId.includes('No MIDI') || deviceId.includes('Error') || deviceId.includes('Web MIDI')) {
-            updateStatus('midiStatus', 'Please select a valid MIDI device', 'error');
-            return;
-        }
-        
-        // Safety check: ensure midiAccess exists and has inputs
-        if (!midiAccess || !midiAccess.inputs) {
-            console.log('🔄 MIDI access not ready, retrying in 200ms...');
-            setTimeout(() => connectDevice(), 200);
-            return;
-        }
-        
-        try {
-            // Initialize enhanced piano synthesizer
-            await pianoSynth.init();
-            
-            // Find the selected MIDI input
-            const input = Array.from(midiAccess.inputs.values()).find(inp => inp.id === deviceId);
-            
-            if (!input) {
-                updateStatus('midiStatus', 'Selected MIDI device not found', 'error');
-                return;
-            }
-            
-            // Set up MIDI input listener
-            input.onmidimessage = handleMIDIMessage;
-            midiInput = input;
-            
-            updateStatus('midiStatus', '🎹 Piano connected! Studio-quality audio enabled', 'ready');
-            
-            // Show piano controls
-            const pianoControls = document.getElementById('pianoControls');
-            if (pianoControls) {
-                pianoControls.style.display = 'block';
-            }
-            
-            console.log('🎹 Connected to MIDI device:', input.name);
-            
-        } catch (error) {
-            console.error('Error connecting to MIDI device:', error);
-            updateStatus('midiStatus', 'Failed to connect to MIDI device', 'error');
-        }
-    }
-    
     function handleMIDIMessage(message) {
         const [command, note, velocity] = message.data;
         const timestamp = performance.now();
@@ -1962,10 +2139,22 @@ const apiBase = "http://localhost:8000";
         element.textContent = message;
         element.className = `status ${type}`;
     }
-    
-    // Event Listeners
+
+    // Initialize everything
     document.addEventListener('DOMContentLoaded', function() {
-        connectDevice()
+        console.log('🚀 DOM loaded, initializing...');
+        
+        // Initialize objects
+        pianoSynth = new PianoSynth();
+        midiRecorder = new MidiRecorder();
+        
+        // Start spectrum detection
+        setTimeout(() => findSpectrumInstance(), 1000);
+        
+        // Load MIDI devices
+        loadDevices();
+        
+        // Setup event listeners for sliders
         const bassComplexity = document.getElementById('bassComplexity');
         const drumComplexity = document.getElementById('drumComplexity');
         const bassValue = document.getElementById('bassValue');
@@ -1983,12 +2172,10 @@ const apiBase = "http://localhost:8000";
             });
         }
         
-        // Piano control event listeners
+        // Piano controls
         const pianoVolume = document.getElementById('pianoVolume');
         const pianoSound = document.getElementById('pianoSound');
-        const reverbAmount = document.getElementById('reverbAmount');
         const volumeValue = document.getElementById('volumeValue');
-        const reverbValue = document.getElementById('reverbValue');
         
         if (pianoVolume && volumeValue) {
             pianoVolume.addEventListener('input', function(e) {
@@ -1998,41 +2185,14 @@ const apiBase = "http://localhost:8000";
             });
         }
         
-        if (reverbAmount && reverbValue) {
-            reverbAmount.addEventListener('input', function(e) {
-                const reverb = parseInt(e.target.value);
-                reverbValue.textContent = reverb + '%';
-                pianoSynth.setReverbAmount(reverb);
-            });
-        }
-        
         if (pianoSound) {
             pianoSound.addEventListener('change', function(e) {
                 pianoSynth.setSoundType(e.target.value);
             });
         }
-        
-        // Load devices on page load
-        loadDevices();
-        
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
-                e.preventDefault();
-                startCapture();
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault();
-                stopCapture();
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
-                e.preventDefault();
-                analyzeAndGenerate();
-            }
-        });
     });
 
-    // Make functions globally accessible for onclick handlers
+    // Make functions globally accessible
     window.connectDevice = connectDevice;
     window.loadDevices = loadDevices;
     window.startCapture = startCapture;
@@ -2041,6 +2201,7 @@ const apiBase = "http://localhost:8000";
     window.toggleMidiPlay = toggleMidiPlay;
     window.stopMidi = stopMidi;
     window.toggleMidiLoop = toggleMidiLoop;
+    window.retryVisualizerConnection = retryVisualizerConnection;
 </script>
 </body>
 </html>

@@ -21,6 +21,8 @@ from chord_analyzer import analyze_chord_progression_with_stretching
 from melody_analyzer2 import analyze_midi_melody, create_four_way_visualization
 from chord_or_melody import detect_midi_type
 from arrangement_generator import generate_arrangement_from_chords
+from chord_or_melody import detect_midi_type_with_stretching_and_viz
+
 
 from pydantic import BaseModel
 
@@ -202,7 +204,7 @@ def force_exactly_8_chords_analysis(midi_path):
 
     return key, (simple_progression, folk_progression, bass_progression, phrase_progression), (simple_conf, folk_conf, bass_conf, phrase_conf), all_segments, notes  # Return notes too!
 
-def create_four_way_visualization_fixed(midi_file, segments, bass_progression, phrase_progression, key, notes, output_file):
+def create_track_visualization(midi_file, segments, bass_progression, phrase_progression, key, notes, output_file):
     """
     Create visualization showing all four harmonization options.
     FIXED: Proper 16-beat timing and text positioning.
@@ -553,12 +555,6 @@ async def analyze_melody(
     segment_size: int = 2,
     tolerance_beats: float = 0.15
 ):
-    """
-    Analyze uploaded MIDI and branch based on detection:
-    - CHORD PROGRESSION → Use chord_analyzer.py logic with stretching
-    - MELODY → Use force_exactly_8_chords_analysis 
-    *** BOTH PATHS INCLUDE CHORD/MELODY DETECTION VISUALIZATION ***
-    """
     if not file.filename.endswith(('.mid', '.midi')):
         raise HTTPException(status_code=400, detail="File must be a MIDI file")
 
@@ -572,12 +568,9 @@ async def analyze_melody(
 
     try:
         print("=" * 80)
-        print("🎵 STEP 1: CHORD/MELODY DETECTION WITH STRETCHING")
+        print("🎵 STEP 1: CHORD/MELODY DETECTION")
         print("=" * 80)
-        
-        # Import the enhanced chord/melody detection
-        from chord_or_melody import detect_midi_type_with_stretching_and_viz
-        
+                
         # Detect if it's a chord progression or melody (with stretching and visualization)
         detected_type, chord_melody_viz_file = detect_midi_type_with_stretching_and_viz(
             temp_path, 
@@ -594,11 +587,7 @@ async def analyze_melody(
         
         # BRANCHING LOGIC: Different analysis based on detection
         if detected_type == "chord_progression":
-            print("🎼 Using CHORD PROGRESSION analysis path...")
-            
-            # Import the adapted chord analyzer
-            from chord_analyzer import analyze_chord_progression_with_stretching
-            
+                        
             # Analyze as chord progression with stretching
             result = analyze_chord_progression_with_stretching(
                 temp_path,
@@ -610,7 +599,6 @@ async def analyze_melody(
             print(f"   Detected progression: {' → '.join(result['chord_progression'])}")
             
         else:  # detected_type == "melody" or "unknown"
-            print("🎼 Using MELODY analysis path (force_exactly_8_chords_analysis)...")
             
             # Use forced 8-chord analysis for melody (existing path)
             key, progressions, confidences, segments, processed_notes = force_exactly_8_chords_analysis(temp_path)
@@ -668,12 +656,12 @@ async def analyze_melody(
         
         else:
             # Generate four-way melody harmonization visualization
-            viz_filename = f"{base_name}_melody_analysis_{timestamp}_four_ways.png"
+            viz_filename = f"{base_name}_melody_analysis_{timestamp}.png"
             
             try:
                 print(f"📊 Generating four-way melody visualization...")
                 
-                create_four_way_visualization_fixed(
+                create_track_visualization(
                     temp_path,
                     result['segments'],
                     result['harmonizations']['bass_foundation']['progression'],
@@ -683,9 +671,9 @@ async def analyze_melody(
                     viz_filename
                 )
                 viz_success = True
-                print(f"✅ Four-way melody visualization: {viz_filename}")
+                print(f"✅ Track visualization: {viz_filename}")
             except Exception as e:
-                print(f"❌ Melody visualization failed: {e}")
+                print(f"❌ Track visualization failed: {e}")
                 viz_success = False
 
         print("\n" + "=" * 80)
