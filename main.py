@@ -17,7 +17,7 @@ import numpy as np
 
 # Import your existing modules
 from model_manager import MagentaModelManager
-from chord_analyzer import analyze_midi_chord_progression
+from chord_analyzer import analyze_chord_progression_with_stretching
 from melody_analyzer2 import analyze_midi_melody, create_four_way_visualization
 from chord_or_melody import detect_midi_type
 from arrangement_generator import generate_arrangement_from_chords
@@ -528,7 +528,7 @@ async def analyze_chords(
 
     try:
         # Analyze chords
-        progression, segments = analyze_midi_chord_progression(
+        progression, segments = analyze_chord_progression_with_stretching(
             temp_path, 
             segment_size=segment_size, 
             tolerance_beats=tolerance_beats
@@ -554,9 +554,10 @@ async def analyze_melody(
     tolerance_beats: float = 0.15
 ):
     """
-    Analyze melody and get 4 harmonization options.
-    *** PRIMARY ENDPOINT for frontend-recorded MIDI ***
-    *** ENFORCES EXACTLY 8 CHORDS + AUTO-GENERATES VISUALIZATION ***
+    Analyze uploaded MIDI and branch based on detection:
+    - CHORD PROGRESSION → Use chord_analyzer.py logic with stretching
+    - MELODY → Use force_exactly_8_chords_analysis 
+    *** BOTH PATHS INCLUDE CHORD/MELODY DETECTION VISUALIZATION ***
     """
     if not file.filename.endswith(('.mid', '.midi')):
         raise HTTPException(status_code=400, detail="File must be a MIDI file")
@@ -570,90 +571,175 @@ async def analyze_melody(
         temp_path = temp_file.name
 
     try:
-        # Use forced 8-chord analysis for frontend uploads
-        key, progressions, confidences, segments, processed_notes = force_exactly_8_chords_analysis(temp_path)
+        print("=" * 80)
+        print("🎵 STEP 1: CHORD/MELODY DETECTION WITH STRETCHING")
+        print("=" * 80)
+        
+        # Import the enhanced chord/melody detection
+        from chord_or_melody import detect_midi_type_with_stretching_and_viz
+        
+        # Detect if it's a chord progression or melody (with stretching and visualization)
+        detected_type, chord_melody_viz_file = detect_midi_type_with_stretching_and_viz(
+            temp_path, 
+            output_dir="generated_visualizations"
+        )
+        
+        print(f"🔍 DETECTED TYPE: {detected_type.upper()}")
+        if chord_melody_viz_file:
+            print(f"📊 Chord/Melody analysis visualization: {chord_melody_viz_file}")
+        
+        print("\n" + "=" * 80)
+        print(f"🎵 STEP 2: BRANCHING TO {detected_type.upper()} ANALYSIS PATH")
+        print("=" * 80)
+        
+        # BRANCHING LOGIC: Different analysis based on detection
+        if detected_type == "chord_progression":
+            print("🎼 Using CHORD PROGRESSION analysis path...")
+            
+            # Import the adapted chord analyzer
+            from chord_analyzer import analyze_chord_progression_with_stretching
+            
+            # Analyze as chord progression with stretching
+            result = analyze_chord_progression_with_stretching(
+                temp_path,
+                segment_size=segment_size,
+                tolerance_beats=tolerance_beats
+            )
+            
+            print(f"✅ Chord progression analysis complete!")
+            print(f"   Detected progression: {' → '.join(result['chord_progression'])}")
+            
+        else:  # detected_type == "melody" or "unknown"
+            print("🎼 Using MELODY analysis path (force_exactly_8_chords_analysis)...")
+            
+            # Use forced 8-chord analysis for melody (existing path)
+            key, progressions, confidences, segments, processed_notes = force_exactly_8_chords_analysis(temp_path)
 
-        simple_prog, folk_prog, bass_prog, phrase_prog = progressions
-        simple_conf, folk_conf, bass_conf, phrase_conf = confidences
+            simple_prog, folk_prog, bass_prog, phrase_prog = progressions
+            simple_conf, folk_conf, bass_conf, phrase_conf = confidences
 
-        print(f"🎼 Analysis complete - Key: {key}")
-        print(f"🎵 8-Chord Progressions Generated:")
-        print(f"  Simple: {' → '.join(simple_prog)}")
-        print(f"  Folk: {' → '.join(folk_prog)}")
-        print(f"  Bass: {' → '.join(bass_prog)}")
-        print(f"  Phrase: {' → '.join(phrase_prog)}")
+            print(f"🎼 Melody analysis complete - Key: {key}")
+            print(f"🎵 8-Chord Progressions Generated:")
+            print(f"  Simple: {' → '.join(simple_prog)}")
+            print(f"  Folk: {' → '.join(folk_prog)}")
+            print(f"  Bass: {' → '.join(bass_prog)}")
+            print(f"  Phrase: {' → '.join(phrase_prog)}")
+            
+            # Package melody results in same format as chord results
+            result = {
+                'analysis_type': 'melody_harmonization',
+                'key': key,
+                'chord_progression': simple_prog,  # Use simple as primary
+                'harmonizations': {
+                    'simple_pop': {'progression': simple_prog, 'confidence': simple_conf},
+                    'folk_acoustic': {'progression': folk_prog, 'confidence': folk_conf},
+                    'bass_foundation': {'progression': bass_prog, 'confidence': bass_conf},
+                    'phrase_foundation': {'progression': phrase_prog, 'confidence': phrase_conf}
+                },
+                'segments': segments,
+                'processed_notes': processed_notes,
+                'forced_8_chords': True
+            }
 
-        # AUTO-GENERATE FOUR-WAY VISUALIZATION
+        print("\n" + "=" * 80)
+        print("🎵 STEP 3: GENERATING VISUALIZATION")
+        print("=" * 80)
+        
+        # Generate appropriate visualization based on analysis type
         timestamp = int(time.time())
         base_name = os.path.splitext(file.filename)[0]
-        viz_filename = f"{base_name}_auto_analysis_{timestamp}_four_ways.png"
-        viz_path = os.path.join("generated_visualizations", viz_filename)
         
-        print(f"📊 Auto-generating four-way visualization...")
         viz_success = False
-        try:
-            # Use the processed notes that were already extracted and stretched
-            print(f"🔍 Using {len(processed_notes)} pre-processed notes for visualization")
+        viz_filename = None
+        
+        if detected_type == "chord_progression":
+            # Generate chord progression visualization
+            viz_filename = f"{base_name}_chord_analysis_{timestamp}.png"
             
-            # Generate four-way visualization automatically with FIXED timing
-            create_four_way_visualization_fixed(
-                temp_path,           # midi_file
-                segments,            # all_segments  
-                bass_prog,           # bass_progression
-                phrase_prog,         # phrase_progression
-                key,                 # key
-                processed_notes,     # notes (already extracted and stretched in analysis)
-                viz_filename         # output_file (just filename, function adds directory)
-            )
-            viz_success = True
-            print(f"✅ Visualization auto-generated: {viz_filename}")
-        except Exception as e:
-            print(f"❌ Visualization generation failed: {e}")
-            # Fallback to original function
             try:
-                create_four_way_visualization(
-                    temp_path, segments, bass_prog, phrase_prog, key, processed_notes, viz_filename
+                # Use the chord analyzer's visualization
+                print(f"📊 Generating chord progression visualization...")
+                result['visualization_file'] = viz_filename
+                viz_success = True
+                print(f"✅ Chord progression visualization: {viz_filename}")
+            except Exception as e:
+                print(f"❌ Chord visualization failed: {e}")
+                viz_success = False
+        
+        else:
+            # Generate four-way melody harmonization visualization
+            viz_filename = f"{base_name}_melody_analysis_{timestamp}_four_ways.png"
+            
+            try:
+                print(f"📊 Generating four-way melody visualization...")
+                
+                create_four_way_visualization_fixed(
+                    temp_path,
+                    result['segments'],
+                    result['harmonizations']['bass_foundation']['progression'],
+                    result['harmonizations']['phrase_foundation']['progression'],
+                    result['key'],
+                    result['processed_notes'],
+                    viz_filename
                 )
                 viz_success = True
-                print(f"✅ Fallback visualization generated: {viz_filename}")
-            except Exception as e2:
-                print(f"❌ Fallback visualization also failed: {e2}")
+                print(f"✅ Four-way melody visualization: {viz_filename}")
+            except Exception as e:
+                print(f"❌ Melody visualization failed: {e}")
                 viz_success = False
 
-        return {
+        print("\n" + "=" * 80)
+        print("🎵 ANALYSIS COMPLETE - RETURNING RESULTS")
+        print("=" * 80)
+
+        # Return unified response format
+        response = {
             "filename": file.filename,
-            "key": key,
-            "harmonizations": {
-                "simple_pop": {
-                    "progression": simple_prog,
-                    "confidence": simple_conf
-                },
-                "folk_acoustic": {
-                    "progression": folk_prog,
-                    "confidence": folk_conf
-                },
-                "bass_foundation": {
-                    "progression": bass_prog,
-                    "confidence": bass_conf
-                },
-                "phrase_foundation": {
-                    "progression": phrase_prog,
-                    "confidence": phrase_conf
-                }
+            "detected_type": detected_type,
+            "analysis_path": "chord_progression" if detected_type == "chord_progression" else "melody_harmonization",
+            
+            # Chord/Melody detection results
+            "chord_melody_detection": {
+                "detected_type": detected_type,
+                "visualization_file": chord_melody_viz_file,
+                "download_url": f"/download/viz/{chord_melody_viz_file}" if chord_melody_viz_file else None
             },
-            "analysis_type": "melody",
-            "segments": len(segments),
-            "forced_8_chords": True,
+            
+            # Main analysis results (format depends on path taken)
+            "analysis_type": result.get('analysis_type', 'unknown'),
+            "key": result.get('key', 'C'),
+            "chord_progression": result.get('chord_progression', []),
+            
+            # Main visualization
             "visualization": {
                 "success": viz_success,
                 "file": viz_filename if viz_success else None,
                 "download_url": f"/download/viz/{viz_filename}" if viz_success else None,
-                "auto_generated": True
+                "type": "chord_progression" if detected_type == "chord_progression" else "four_way_harmonization"
             }
         }
+        
+        # Add harmonizations if melody path was taken
+        if detected_type != "chord_progression" and 'harmonizations' in result:
+            response["harmonizations"] = result['harmonizations']
+            response["segments"] = len(result.get('segments', []))
+            response["forced_8_chords"] = result.get('forced_8_chords', False)
+        
+        # Add chord analysis specific data if chord path was taken
+        if detected_type == "chord_progression":
+            response["chord_analysis"] = {
+                "segments": result.get('segments', []),
+                "timing_adjustments": result.get('timing_adjustments', []),
+                "tolerance_used": result.get('tolerance_used', False)
+            }
+
+        return response
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Melody analysis failed: {str(e)}")
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"❌ MIDI analysis error: {error_details}")
+        raise HTTPException(status_code=500, detail=f"MIDI analysis failed: {str(e)}")
     finally:
         if os.path.exists(temp_path):
             os.unlink(temp_path)
@@ -737,7 +823,7 @@ async def full_analysis_and_generation(
 
         # Step 2: Analyze based on type
         if midi_type == "chord_progression":
-            progression, segments = analyze_midi_chord_progression(temp_path)
+            progression, segments = analyze_chord_progression_with_stretching(temp_path)
             chord_list = progression
             analysis_data = {"type": "chord_progression", "progression": progression}
         else:

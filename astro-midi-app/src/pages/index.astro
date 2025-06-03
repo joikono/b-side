@@ -1673,7 +1673,7 @@ const apiBase = "http://localhost:8000";
         }
     }
     
-    // Display auto-analysis results immediately after recording
+    // Fixed displayAutoAnalysisResults - handles both chord progression and melody responses
     function displayAutoAnalysisResults(result) {
         const resultsSection = document.getElementById('results');
         const keyInfo = document.getElementById('keyInfo');
@@ -1685,40 +1685,107 @@ const apiBase = "http://localhost:8000";
         
         resultsSection.style.display = 'block';
         
-        // Calculate max confidence for display
-        const maxConfidence = Math.max(
-            result.harmonizations.simple_pop.confidence,
-            result.harmonizations.folk_acoustic.confidence,
-            result.harmonizations.bass_foundation.confidence,
-            result.harmonizations.phrase_foundation.confidence
-        ) / 100;
+        console.log('🔍 DEBUG: Full result object:', result);
+        console.log('🔍 DEBUG: Detected type:', result.detected_type);
+        console.log('🔍 DEBUG: Analysis path:', result.analysis_path);
+        
+        // Display key information
+        const detectedType = result.detected_type || 'unknown';
+        const analysisPath = result.analysis_path || 'unknown';
+        const key = result.key || 'C';
         
         keyInfo.innerHTML = 
-            `<strong>Detected Key:</strong> ${result.key} (confidence: ${maxConfidence.toFixed(2)}) - <em>Auto-analyzed from recording</em>`;
+            `<strong>Detected Type:</strong> ${detectedType.toUpperCase()}<br>
+            <strong>Analysis Path:</strong> ${analysisPath}<br>
+            <strong>Key:</strong> ${key}`;
         
-        let progressionsHtml = '<h4>🎵 All 4 Chord Progression Options (8 chords each):</h4>';
-        Object.entries(result.harmonizations).forEach(([style, data]) => {
-            const styleDisplayName = style.replace('_', '/').replace(/\b\w/g, l => l.toUpperCase());
-            progressionsHtml += `<div style="margin: 10px 0; padding: 10px; border-radius: 8px; background: #f0f0f0;">
-                <strong>${styleDisplayName}:</strong> 
-                <div class="chord-progression">${data.progression.join(' → ')}</div>
-                <small>Confidence: ${data.confidence.toFixed(1)}% | Forced 8-chord analysis</small>
+        // Handle different response formats based on detection type
+        if (detectedType === 'chord_progression') {
+            // CHORD PROGRESSION PATH - Single progression
+            console.log('📊 Displaying chord progression results');
+            
+            const chordProgression = result.chord_progression || ['C', 'F', 'G', 'C'];
+            
+            let progressionsHtml = '<h4>🎼 Detected Chord Progression:</h4>';
+            progressionsHtml += `<div style="margin: 10px 0; padding: 15px; border-radius: 8px; background: #e3f2fd;">
+                <strong>Chord Progression:</strong> 
+                <div class="chord-progression">${chordProgression.join(' → ')}</div>
+                <small>Analysis: Direct chord detection from polyphonic input</small>
             </div>`;
-        });
-        progressions.innerHTML = progressionsHtml;
+            
+            // Show chord analysis details if available
+            if (result.chord_analysis) {
+                const segments = result.chord_analysis.segments || [];
+                const timingAdjustments = result.chord_analysis.timing_adjustments || [];
+                
+                progressionsHtml += `<div style="margin: 10px 0; padding: 10px; border-radius: 8px; background: #f5f5f5;">
+                    <small><strong>Analysis Details:</strong><br>
+                    • Segments analyzed: ${segments.length}<br>
+                    • Timing adjustments: ${timingAdjustments.length} beats<br>
+                    • Tolerance used: ${result.chord_analysis.tolerance_used ? 'Yes' : 'No'}</small>
+                </div>`;
+            }
+            
+            progressions.innerHTML = progressionsHtml;
+            
+        } else {
+            // MELODY PATH - Multiple harmonization options
+            console.log('📊 Displaying melody harmonization results');
+            
+            if (result.harmonizations) {
+                // Calculate max confidence for display
+                const confidences = Object.values(result.harmonizations).map(h => h.confidence || 0);
+                const maxConfidence = Math.max(...confidences) / 100;
+                
+                keyInfo.innerHTML += `<br><strong>Confidence:</strong> ${maxConfidence.toFixed(2)}`;
+                
+                let progressionsHtml = '<h4>🎵 4 Harmonization Options (8 chords each):</h4>';
+                Object.entries(result.harmonizations).forEach(([style, data]) => {
+                    const styleDisplayName = style.replace('_', '/').replace(/\b\w/g, l => l.toUpperCase());
+                    const progression = data.progression || ['C', 'C', 'C', 'C', 'C', 'C', 'C', 'C'];
+                    const confidence = data.confidence || 0;
+                    
+                    progressionsHtml += `<div style="margin: 10px 0; padding: 10px; border-radius: 8px; background: #f0f0f0;">
+                        <strong>${styleDisplayName}:</strong> 
+                        <div class="chord-progression">${progression.join(' → ')}</div>
+                        <small>Confidence: ${confidence.toFixed(1)}% | Forced 8-chord analysis</small>
+                    </div>`;
+                });
+                progressions.innerHTML = progressionsHtml;
+            } else {
+                // Fallback if no harmonizations (shouldn't happen for melody path)
+                progressions.innerHTML = '<h4>⚠️ No harmonization data available</h4>';
+            }
+        }
         
-        arrangementLink.innerHTML = '<em>Use buttons below to analyze specific styles or generate full arrangements</em>';
+        // Generic arrangement link
+        arrangementLink.innerHTML = '<em>Use "Generate Full Arrangement" button below to create MIDI arrangement</em>';
         
-        // Show auto-generated visualization
-        if (result.visualization && result.visualization.success) {
-            visualizationLink.innerHTML = 
-                `<strong>📊 Auto-Generated Visualization:</strong> <a href="${API_BASE}${result.visualization.download_url}" target="_blank" rel="noopener">View Complete Analysis Chart</a> <small>(All 4 harmonization options)</small>`;
+        // Handle visualization links
+        let visualizationHtml = '';
+        
+        // Chord/Melody detection visualization (always present)
+        if (result.chord_melody_detection && result.chord_melody_detection.download_url) {
+            visualizationHtml += `<strong>🔍 Type Detection:</strong> <a href="${API_BASE}${result.chord_melody_detection.download_url}" target="_blank" rel="noopener">View Detection Analysis</a><br>`;
+        }
+        
+        // Main analysis visualization
+        if (result.visualization && result.visualization.success && result.visualization.download_url) {
+            const vizType = result.visualization.type || 'analysis';
+            const vizLabel = vizType === 'chord_progression' ? 'Chord Progression Chart' : 'Harmonization Options Chart';
+            visualizationHtml += `<strong>📊 ${vizLabel}:</strong> <a href="${API_BASE}${result.visualization.download_url}" target="_blank" rel="noopener">View Analysis Chart</a>`;
+        }
+        
+        if (visualizationHtml) {
+            visualizationLink.innerHTML = visualizationHtml;
         } else {
             visualizationLink.innerHTML = '<em>Visualization generation failed</em>';
         }
+        
+        console.log('✅ Auto-analysis results displayed successfully');
     }
     
-    // Also update analyzeAndGenerate to add more debugging
+    // Fixed analyzeAndGenerate - handles both chord progression and melody results
     async function analyzeAndGenerate() {
         if (!window.uploadedMidiResult) {
             updateStatus('analysisStatus', 'Please record a melody first', 'error');
@@ -1738,16 +1805,48 @@ const apiBase = "http://localhost:8000";
         updateStatus('analysisStatus', '🎵 Generating full arrangement...', 'analyzing');
         
         try {
-            // Get the selected chord progression from uploaded result
             const result = window.uploadedMidiResult;
-            const styleMap = {
-                "simple_pop": result.harmonizations.simple_pop.progression,
-                "folk_acoustic": result.harmonizations.folk_acoustic.progression,
-                "bass_foundation": result.harmonizations.bass_foundation.progression,
-                "phrase_foundation": result.harmonizations.phrase_foundation.progression
-            };
+            const detectedType = result.detected_type || 'melody';
             
-            const selectedProgression = styleMap[style];
+            console.log('🔧 DEBUG: Detected type for arrangement:', detectedType);
+            console.log('🔧 DEBUG: Full result object:', result);
+            
+            let selectedProgression;
+            let styleMap = {};
+            
+            if (detectedType === 'chord_progression') {
+                // CHORD PROGRESSION PATH - Use the detected progression
+                console.log('🎼 Using detected chord progression for arrangement');
+                selectedProgression = result.chord_progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C'];
+                
+                // For chord progressions, all "styles" use the same detected progression
+                styleMap = {
+                    "simple_pop": selectedProgression,
+                    "folk_acoustic": selectedProgression,
+                    "bass_foundation": selectedProgression,
+                    "phrase_foundation": selectedProgression
+                };
+                
+                console.log('🔧 Using chord progression:', selectedProgression);
+                
+            } else {
+                // MELODY PATH - Use harmonizations as before
+                console.log('🎼 Using melody harmonizations for arrangement');
+                
+                if (!result.harmonizations) {
+                    throw new Error('No harmonizations found in melody result');
+                }
+                
+                styleMap = {
+                    "simple_pop": result.harmonizations.simple_pop?.progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C'],
+                    "folk_acoustic": result.harmonizations.folk_acoustic?.progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C'],
+                    "bass_foundation": result.harmonizations.bass_foundation?.progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C'],
+                    "phrase_foundation": result.harmonizations.phrase_foundation?.progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C']
+                };
+                
+                selectedProgression = styleMap[style];
+                console.log('🔧 Selected harmonization style:', style);
+            }
             
             console.log('🔧 Sending request with progression:', selectedProgression);
             
@@ -1780,20 +1879,27 @@ const apiBase = "http://localhost:8000";
                 // Pass the raw filename to showMidiPlayer - it will handle all cleaning
                 showMidiPlayer(arrangementResult.output_file);
                 
-                // Create result object for display
+                // Create result object for display (handle both types)
+                let keyConfidence = 0.75; // Default confidence
+                
+                if (detectedType === 'melody' && result.harmonizations) {
+                    // Calculate confidence from harmonizations
+                    const confidences = Object.values(result.harmonizations)
+                        .map(h => h?.confidence || 0)
+                        .filter(c => c > 0);
+                    keyConfidence = confidences.length > 0 ? Math.max(...confidences) / 100 : 0.75;
+                }
+                
                 const fullResult = {
                     success: true,
-                    key: result.key,
-                    key_confidence: Math.max(
-                        result.harmonizations.simple_pop.confidence,
-                        result.harmonizations.folk_acoustic.confidence,
-                        result.harmonizations.bass_foundation.confidence,
-                        result.harmonizations.phrase_foundation.confidence
-                    ) / 100,
+                    key: result.key || 'C',
+                    key_confidence: keyConfidence,
                     chord_progressions: styleMap,
                     arrangement_file: arrangementResult.output_file.split('/').pop(), // Just filename for download link
                     visualization_file: null,
-                    visualization_url: null
+                    visualization_url: null,
+                    detected_type: detectedType,
+                    analysis_path: result.analysis_path || detectedType
                 };
                 
                 updateStatus('analysisStatus', '✅ Analysis and arrangement complete!', 'ready');

@@ -1,93 +1,12 @@
-"""
-This module analyzes MIDI files to detect chord progressions using advanced 
-bass-prioritized chord detection with timing tolerance for anticipatory playing.
+# chord_analyzer_adapted.py - Chord analysis with stretching for recorded MIDI
 
-KEY FEATURES:
-- 🎵 Bass-prioritized chord detection (lower pitches weighted more heavily)
-- ⏰ Timing tolerance for anticipatory/early playing (handles real musician timing)
-- 🎯 2-beat segment analysis (optimal for most musical styles)
-- 📊 Comprehensive visualization with timing adjustment indicators
-- 🌍 Universal compatibility (works with any MIDI file regardless of genre)
-
-TEMPO & TIME SIGNATURE INDEPENDENCE:
-- The algorithm works entirely in "beat units" as defined by MIDI ticks_per_beat
-- NO explicit BPM detection - works at any tempo (60 BPM to 200+ BPM)
-- NO time signature assumptions - works in 4/4, 3/4, 7/8, or any time signature
-- Timing tolerance is beat-relative (0.15 beats = 15% of a beat, regardless of actual tempo)
-
-TIMING TOLERANCE INNOVATION:
-Musicians often play chords slightly early (anticipatory playing). This algorithm:
-- Detects notes played up to 0.15 beats before their "correct" time
-- Only applies timing correction if it significantly improves chord detection
-- Visually indicates where timing corrections were applied
-- Solves common issues like "Am → F → F → F" becoming correct "Am → Am → F → F"
-
-CHORD DETECTION METHODOLOGY:
-- Supports all 12 major and minor triads (C, Cm, C#, C#m, D, Dm, etc.)
-- Bass note (lowest pitch) is the strongest chord indicator
-- Complete triads get bonus scoring
-- Non-chord tones receive penalties
-- Confidence scoring helps resolve ambiguous cases
-
-SEGMENT ANALYSIS:
-- Uses 2-beat segments as optimal balance for most music styles
-- Handles both fast chord changes (jazz, complex progressions) and slow changes (pop, rock)
-- Each segment represents half a measure in 4/4 time (but works in any time signature)
-
-TYPICAL OUTPUT EXAMPLES:
-- Pop progression: C → C → G → G → Am → Am → F → F  (one chord per measure)
-- Jazz progression: C → Dm → Em → F → G → Am → Dm → C  (two chords per measure)
-- Complex: F → F → Em → Em  (mixed with melodic content)
-
-USAGE:
-    progression, segments = analyze_midi_chord_progression(
-        'your_file.mid',
-        segment_size=2,        # beats per segment (2 recommended)
-        tolerance_beats=0.15   # timing tolerance (0.1-0.2 recommended)
-    )
-
-VISUALIZATION OUTPUT:
-- Green segments: Normal timing detection
-- Blue segments: Timing tolerance was applied
-- Red dashed lines: Locations where early notes were detected
-- Musical note emoji (🎵): Visual indicator of timing corrections
-
-PARAMETERS TO ADJUST:
-- tolerance_beats: 0.1 (strict) to 0.2 (lenient) - how early notes can be played
-- segment_size: Usually 2, could use 1 for very complex music or 4 for very simple
-
-DEPENDENCIES:
-- miditoolkit: MIDI file loading and manipulation
-- matplotlib: Visualization and plotting
-- numpy: Numerical operations
-- collections.Counter: Chord voting/consensus
-
-AUTHOR NOTES:
-Designed for real-world MIDI analysis where human timing isn't perfect.
-Prioritizes musical intuition (bass notes matter most) over mathematical precision.
-Handles both composed MIDI (exact timing) and performed MIDI (human timing variations).
-"""
-
-import miditoolkit
-import matplotlib.pyplot as plt
 import numpy as np
-from collections import Counter
+import matplotlib.pyplot as plt
+import os
+import time
+from collections import Counter, defaultdict
 
-# COMPATIBILITY FIX - Add this after your imports
-import mido
-
-original_mido_init = mido.MidiFile.__init__
-
-def patched_mido_init(self, filename=None, file=None, type=1, ticks_per_beat=480, 
-                     charset='latin-1', debug=False, clip=None, **kwargs):
-    """Ignore the 'clip' parameter that miditoolkit tries to pass"""
-    original_mido_init(self, filename=filename, file=file, type=type, 
-                      ticks_per_beat=ticks_per_beat, charset=charset, debug=debug, **kwargs)
-
-mido.MidiFile.__init__ = patched_mido_init
-# print("✅ Mido compatibility patch applied")
-
-# Chord definitions - all 12 major and minor triads
+# Chord definitions from original chord_analyzer.py
 CHORD_DEFINITIONS = {
     # Major triads (root, major third, perfect fifth)
     'C': [0, 4, 7], 'C#': [1, 5, 8], 'D': [2, 6, 9], 'D#': [3, 7, 10], 
@@ -101,22 +20,37 @@ CHORD_DEFINITIONS = {
     
     # Major 7th chords (for jazz contexts)
     'Cmaj7': [0, 4, 7, 11], 'C#maj7': [1, 5, 8, 0], 'Dmaj7': [2, 6, 9, 1],
-    # And so on for other chord types...
+    'D#maj7': [3, 7, 10, 2], 'Emaj7': [4, 8, 11, 3], 'Fmaj7': [5, 9, 0, 4],
+    'F#maj7': [6, 10, 1, 5], 'Gmaj7': [7, 11, 2, 6], 'G#maj7': [8, 0, 3, 7],
+    'Amaj7': [9, 1, 4, 8], 'A#maj7': [10, 2, 5, 9], 'Bmaj7': [11, 3, 6, 10],
+    
+    # Minor 7th chords
+    'Cm7': [0, 3, 7, 10], 'C#m7': [1, 4, 8, 11], 'Dm7': [2, 5, 9, 0], 
+    'D#m7': [3, 6, 10, 1], 'Em7': [4, 7, 11, 2], 'Fm7': [5, 8, 0, 3],
+    'F#m7': [6, 9, 1, 4], 'Gm7': [7, 10, 2, 5], 'G#m7': [8, 11, 3, 6],
+    'Am7': [9, 0, 4, 7], 'A#m7': [10, 1, 5, 8], 'Bm7': [11, 2, 6, 9],
+    
+    # Dominant 7th chords
+    'C7': [0, 4, 7, 10], 'C#7': [1, 5, 8, 11], 'D7': [2, 6, 9, 0],
+    'D#7': [3, 7, 10, 1], 'E7': [4, 8, 11, 2], 'F7': [5, 9, 0, 3],
+    'F#7': [6, 10, 1, 4], 'G7': [7, 11, 2, 5], 'G#7': [8, 0, 3, 6],
+    'A7': [9, 1, 4, 7], 'A#7': [10, 2, 5, 8], 'B7': [11, 3, 6, 9]
 }
 
-def identify_chord_with_confidence(notes):
+def identify_chord_with_confidence(note_group):
     """
-    Enhanced chord identification that also returns a confidence score.
+    Enhanced chord identification that returns a confidence score.
+    Adapted to work with melody_analyzer2 note format.
     """
-    if not notes:
+    if not note_group:
         return None, 0
     
-    # Extract pitch classes from notes
-    all_pitches = [note['pitch'] for note in notes]
+    # Extract pitch classes from notes (melody_analyzer2 format)
+    all_pitches = [note['pitch'] for note in note_group]
     pitch_classes = sorted(set(pitch % 12 for pitch in all_pitches))
     
     # Get bass note
-    sorted_notes = sorted(notes, key=lambda x: x['pitch'])
+    sorted_notes = sorted(note_group, key=lambda x: x['pitch'])
     bass_pc = sorted_notes[0]['pitch'] % 12
     
     # Calculate scores for all possible chords
@@ -131,7 +65,7 @@ def identify_chord_with_confidence(notes):
         
         # Penalize for non-chord tones
         non_chord_tones = set(pitch_classes) - set(chord_pcs)
-        score -= len(non_chord_tones) * 0.2
+        score -= len(non_chord_tones) * 0.3
         
         # Bass note bonus/penalty
         if bass_pc == chord_pcs[0]:  # Root in bass
@@ -170,96 +104,119 @@ def identify_chord_with_confidence(notes):
     
     return best_chord, max(0, confidence)
 
-def extract_notes_with_timing_tolerance(midi_file, tolerance_beats=0.15):
+def apply_stretching_to_chord_analysis(notes):
     """
-    Extract notes with timing tolerance to handle early/anticipatory playing.
+    Apply the same stretching logic as force_exactly_8_chords_analysis to chord analysis.
+    """
+    if not notes:
+        return notes
     
-    Parameters:
-    - tolerance_beats: How many beats early a note can be to still count for the next segment
+    # Find actual musical content span (same logic as force_exactly_8_chords_analysis)
+    music_start = min(note['start'] for note in notes)
+    music_end = max(note['end'] for note in notes)
+    actual_duration = music_end - music_start
+    
+    print(f"🎵 Chord analysis - Original content span: {music_start:.2f} → {music_end:.2f} beats ({actual_duration:.2f} beats)")
+    
+    # Apply stretching if content is substantial (same logic as force_exactly_8_chords_analysis)
+    if actual_duration > 4.0:  # Only stretch if we have substantial content
+        print(f"🎯 Chord analysis - Stretching timing from {actual_duration:.1f} beats to 16.0 beats...")
+        
+        # Calculate stretch factor (same as force_exactly_8_chords_analysis)
+        target_duration = 16.0  # 16 beats
+        stretch_factor = target_duration / actual_duration
+        stretch_factor *= 0.98  # Apply the same correction factor
+        
+        offset = music_start
+        
+        # Normalize and stretch all note timings
+        for note in notes:
+            note['start'] = (note['start'] - offset) * stretch_factor
+            note['end'] = (note['end'] - offset) * stretch_factor
+        
+        print(f"✅ Chord analysis - Timing stretched by factor {stretch_factor:.2f}x")
+    else:
+        print(f"⚠️  Chord analysis - Too little content ({actual_duration:.1f} beats). Using original timing.")
+        # Still normalize to start at 0
+        offset = music_start
+        for note in notes:
+            note['start'] = note['start'] - offset
+            note['end'] = note['end'] - offset
+    
+    return notes
+
+def group_notes_by_beats_with_tolerance(notes, tolerance_beats=0.15):
     """
-    beat_notes = {}
+    Group notes by beats with timing tolerance for anticipatory playing.
+    Uses stretched note timing.
+    """
+    beat_notes = defaultdict(list)
+    early_notes = defaultdict(list)
     max_beat = 0
-    early_notes = {}  # Store notes that might belong to the next segment
     
-    for instrument in midi_file.instruments:
-        for note in instrument.notes:
-            # Calculate precise beat positions
-            precise_start = note.start / midi_file.ticks_per_beat
-            precise_end = note.end / midi_file.ticks_per_beat
-            
-            beat_start = int(precise_start)
-            beat_end = int(precise_end)
-            
-            # Check if note starts close to the next beat boundary
-            fractional_part = precise_start - beat_start
-            is_anticipatory = fractional_part >= (1.0 - tolerance_beats)
-            
-            note_data = {
-                'pitch': note.pitch,
-                'velocity': note.velocity,
-                'start': note.start,
-                'end': note.end,
-                'precise_start': precise_start,
-                'is_anticipatory': is_anticipatory
-            }
-            
-            # Add note to all beats it spans
-            for beat in range(beat_start, beat_end + 1):
-                if beat not in beat_notes:
-                    beat_notes[beat] = []
-                beat_notes[beat].append(note_data)
-                max_beat = max(max_beat, beat)
-            
-            # If note is anticipatory, also consider it for the next beat
-            if is_anticipatory and beat_start + 1 <= beat_end + 1:
-                next_beat = beat_start + 1
-                if next_beat not in early_notes:
-                    early_notes[next_beat] = []
-                early_notes[next_beat].append(note_data)
-                max_beat = max(max_beat, next_beat)
+    for note in notes:
+        # Use stretched timing (already applied)
+        precise_start = note['start']
+        precise_end = note['end']
+        
+        beat_start = int(precise_start)
+        beat_end = int(precise_end)
+        
+        # Check if note starts close to the next beat boundary
+        fractional_part = precise_start - beat_start
+        is_anticipatory = fractional_part >= (1.0 - tolerance_beats)
+        
+        # Add note to all beats it spans
+        for beat in range(beat_start, beat_end + 1):
+            beat_notes[beat].append(note)
+            max_beat = max(max_beat, beat)
+        
+        # If note is anticipatory, also consider it for the next beat
+        if is_anticipatory and beat_start + 1 <= beat_end + 1:
+            next_beat = beat_start + 1
+            early_notes[next_beat].append(note)
+            max_beat = max(max_beat, next_beat)
     
     return beat_notes, early_notes, max_beat
 
-def identify_chord_with_early_notes(regular_notes, early_notes=None):
+def analyze_chord_progression_with_stretching(midi_file_path, segment_size=2, tolerance_beats=0.15):
     """
-    Identify chord considering both regular notes and potentially early notes.
+    Analyze chord progression using melody_analyzer2 timing extraction + stretching.
     """
-    # First, try with just regular notes
-    if regular_notes:
-        regular_chord, regular_confidence = identify_chord_with_confidence(regular_notes)
-    else:
-        regular_chord, regular_confidence = None, 0
+    print(f"🎼 Analyzing chord progression: {midi_file_path}")
+    print(f"🎯 Using stretching-compatible chord analysis")
     
-    # If we have early notes, try including them
-    if early_notes:
-        combined_notes = regular_notes + early_notes
-        combined_chord, combined_confidence = identify_chord_with_confidence(combined_notes)
-        
-        # If including early notes gives a much better result, use it
-        if combined_confidence > regular_confidence + 0.5:  # Threshold for improvement
-            return combined_chord, combined_confidence, True  # True = used early notes
+    # STEP 1: Use melody_analyzer2 to extract timing (same as force_exactly_8_chords_analysis)
+    from melody_analyzer2 import extract_melody_with_timing
     
-    return regular_chord, regular_confidence, False  # False = didn't use early notes
-
-def analyze_midi_chord_progression(midi_file_path, segment_size=2, tolerance_beats=0.15):
-    """
-    Analyze MIDI file with timing tolerance for anticipatory playing.
-    """
-    midi_file = miditoolkit.MidiFile(midi_file_path)
-    print(f"Analyzing MIDI file: {midi_file_path}")
-    print(f"Ticks per beat: {midi_file.ticks_per_beat}")
-    print(f"Using timing tolerance: {tolerance_beats} beats")
+    notes, ticks_per_beat = extract_melody_with_timing(midi_file_path, tolerance_beats=tolerance_beats)
     
-    # Extract notes with timing tolerance
-    beat_notes, early_notes, max_beat = extract_notes_with_timing_tolerance(
-        midi_file, tolerance_beats
+    if not notes:
+        print("❌ No notes found in MIDI file")
+        return {
+            'analysis_type': 'chord_progression',
+            'chord_progression': ['C'] * 8,
+            'segments': [],
+            'key': 'C',
+            'timing_adjustments': [],
+            'tolerance_used': False
+        }
+    
+    print(f"📊 Extracted {len(notes)} notes from MIDI")
+    
+    # STEP 2: Apply stretching (same logic as force_exactly_8_chords_analysis)
+    stretched_notes = apply_stretching_to_chord_analysis(notes)
+    
+    # STEP 3: Group notes by beats with tolerance
+    beat_notes, early_notes, max_beat = group_notes_by_beats_with_tolerance(
+        stretched_notes, tolerance_beats
     )
     
-    # Analyze each beat with timing tolerance
+    # STEP 4: Analyze each beat for chords
     beat_analysis = []
     timing_adjustments = []
     
-    for beat in range(max_beat + 1):
+    for beat in range(min(16, max_beat + 1)):  # Limit to 16 beats for consistency
         regular_notes = beat_notes.get(beat, [])
         early_notes_for_beat = early_notes.get(beat, [])
         
@@ -283,103 +240,145 @@ def analyze_midi_chord_progression(midi_file_path, segment_size=2, tolerance_bea
         print(f"Beat {beat}: Pitch Classes {pitch_classes}, Detected: {chord}" + 
               (" (with early notes)" if used_early else ""))
         
-        beat_analysis.append((beat, pitch_classes, chord, used_early))
+        beat_analysis.append((beat, pitch_classes, chord, used_early, confidence))
     
-    # Group into 2-beat segments
+    # STEP 5: Group into 2-beat segments (or segment_size-beat segments)
     segments = []
     
-    for seg_idx in range((max_beat + segment_size - 1) // segment_size):
+    num_segments = 16 // segment_size  # Force to exactly fill 16 beats
+    
+    for seg_idx in range(num_segments):
         start_beat = seg_idx * segment_size
-        end_beat = min(start_beat + segment_size - 1, max_beat)
+        end_beat = start_beat + segment_size - 1
         
-        # Collect all notes for this segment (including timing-adjusted ones)
-        segment_notes = []
+        # Collect all chords for this segment
+        segment_chords = []
+        segment_confidences = []
         segment_used_early = False
         
-        for beat in range(start_beat, end_beat + 1):
-            regular_notes = beat_notes.get(beat, [])
-            early_notes_for_beat = early_notes.get(beat, [])
-            
-            # Check if this beat used early notes in our analysis
-            beat_used_early = any(beat == b for b, _, _, used in beat_analysis if used)
-            
-            if beat_used_early:
-                segment_notes.extend(regular_notes + early_notes_for_beat)
-                segment_used_early = True
-            else:
-                segment_notes.extend(regular_notes)
+        for beat, pcs, chord, used_early, confidence in beat_analysis:
+            if start_beat <= beat <= end_beat and chord is not None:
+                segment_chords.append(chord)
+                segment_confidences.append(confidence)
+                if used_early:
+                    segment_used_early = True
         
-        if not segment_notes:
-            continue
-        
-        # Get the dominant chord for this segment using voting
-        segment_chords = [chord for b, _, chord, _ in beat_analysis 
-                         if start_beat <= b <= end_beat and chord is not None]
-        
+        # Determine dominant chord for this segment
         if segment_chords:
+            # Use chord with highest confidence, or most frequent if tied
             chord_counts = Counter(segment_chords)
-            dominant_chord = chord_counts.most_common(1)[0][0]
+            if len(set(segment_chords)) == 1:
+                dominant_chord = segment_chords[0]
+            else:
+                # Find chord with highest average confidence
+                chord_conf_map = defaultdict(list)
+                for chord, conf in zip(segment_chords, segment_confidences):
+                    chord_conf_map[chord].append(conf)
+                
+                avg_confidences = {chord: np.mean(confs) for chord, confs in chord_conf_map.items()}
+                dominant_chord = max(avg_confidences.items(), key=lambda x: x[1])[0]
         else:
-            dominant_chord = None
+            # No chord detected, use previous or default
+            dominant_chord = segments[-1]['chord'] if segments else 'C'
         
         segments.append({
             'start_beat': start_beat,
             'end_beat': end_beat,
             'chord': dominant_chord,
             'used_timing_tolerance': segment_used_early,
-            'segment_idx': seg_idx
+            'segment_idx': seg_idx,
+            'confidence': np.mean(segment_confidences) if segment_confidences else 0
         })
         
         timing_note = " (timing adjusted)" if segment_used_early else ""
         print(f"Segment {seg_idx+1} (Beats {start_beat}-{end_beat}): {dominant_chord}{timing_note}")
     
-    # Create visualization
-    create_tolerance_visualization(midi_file, segments, timing_adjustments, 
-                                 f"chord_analysis_tolerance.png")
-    
-    # Extract final progression
+    # STEP 6: Extract final progression and detect key
     chord_progression = [s['chord'] for s in segments if s['chord'] is not None]
     
-    print(f"\nTiming adjustments made at beats: {timing_adjustments}")
-    print("\nFinal Chord Progression:")
-    print(" → ".join(chord_progression))
+    # Ensure we have exactly 8 chords (pad or truncate)
+    while len(chord_progression) < 8:
+        chord_progression.append(chord_progression[-1] if chord_progression else 'C')
+    chord_progression = chord_progression[:8]
     
-    return chord_progression, segments
+    # Simple key detection based on most common chord
+    chord_counter = Counter(chord_progression)
+    most_common_chord = chord_counter.most_common(1)[0][0]
+    
+    # Extract key from most common chord
+    if most_common_chord.endswith('m'):
+        detected_key = most_common_chord  # Already has 'm'
+    else:
+        detected_key = most_common_chord.replace('7', '').replace('maj', '')  # Remove extensions
+    
+    # STEP 7: Generate visualization
+    create_chord_progression_visualization(
+        stretched_notes, segments, timing_adjustments, midi_file_path
+    )
+    
+    print(f"\n🎵 Timing adjustments made at beats: {timing_adjustments}")
+    print(f"🎼 Detected key: {detected_key}")
+    print(f"🎵 Final Chord Progression: {' → '.join(chord_progression)}")
+    
+    return {
+        'analysis_type': 'chord_progression',
+        'chord_progression': chord_progression,
+        'segments': segments,
+        'key': detected_key,
+        'timing_adjustments': timing_adjustments,
+        'tolerance_used': len(timing_adjustments) > 0,
+        'max_beat': max_beat,
+        'stretched_notes': stretched_notes
+    }
 
-def create_tolerance_visualization(midi_file, segments, timing_adjustments, output_file, midi_file_path=None):
-    """Create visualization highlighting timing tolerance adjustments"""
-    import os
+def identify_chord_with_early_notes(regular_notes, early_notes=None):
+    """
+    Identify chord considering both regular notes and potentially early notes.
+    """
+    # First, try with just regular notes
+    if regular_notes:
+        regular_chord, regular_confidence = identify_chord_with_confidence(regular_notes)
+    else:
+        regular_chord, regular_confidence = None, 0
     
-    # Create output directory
+    # If we have early notes, try including them
+    if early_notes:
+        combined_notes = regular_notes + early_notes
+        combined_chord, combined_confidence = identify_chord_with_confidence(combined_notes)
+        
+        # If including early notes gives a much better result, use it
+        if combined_confidence > regular_confidence + 0.1:  # Threshold for improvement (PLAY WITH THIS)
+            return combined_chord, combined_confidence, True  # True = used early notes
+    
+    return regular_chord, regular_confidence, False  # False = didn't use early notes
+
+def create_chord_progression_visualization(notes, segments, timing_adjustments, midi_file_path):
+    """
+    Create visualization for chord progression analysis with stretching.
+    """
     output_dir = "generated_visualizations"
     os.makedirs(output_dir, exist_ok=True)
     
-    # Get filename for title
-    if midi_file_path:
-        midi_filename = os.path.splitext(os.path.basename(midi_file_path))[0]
-    else:
-        # Fallback: extract from output_file name
-        midi_filename = os.path.splitext(output_file)[0].replace('chord_analysis_tolerance', '').replace('_', '')
+    # Create filename
+    timestamp = int(time.time())
+    base_name = os.path.splitext(os.path.basename(midi_file_path))[0]
+    viz_filename = f"{base_name}_chord_progression_{timestamp}.png"
+    viz_path = os.path.join(output_dir, viz_filename)
     
-    # Update output file path to include directory
-    output_file = os.path.join(output_dir, output_file)
+    plt.figure(figsize=(16, 8))
     
-    plt.figure(figsize=(14, 6))
+    # Plot 1: Note timeline (piano roll style)
+    plt.subplot(2, 1, 1)
+    plt.title(f'Chord Progression Analysis - {base_name}\n(With Stretching & Timing Tolerance)', 
+              fontsize=16, fontweight='bold', pad=20)
     
-    # Extract note data
-    note_data = []
-    for instrument in midi_file.instruments:
-        for note in instrument.notes:
-            beat_start = note.start / midi_file.ticks_per_beat
-            beat_end = note.end / midi_file.ticks_per_beat
-            note_data.append((beat_start, beat_end, note.pitch))
-    
-    # Plot notes
-    for start, end, pitch in note_data:
-        plt.plot([start, end], [pitch, pitch], linewidth=2)
+    if notes:
+        for note in notes:
+            plt.plot([note['start'], note['end']], [note['pitch'], note['pitch']], 
+                    linewidth=3, alpha=0.7)
+            plt.plot(note['start'], note['pitch'], 'o', markersize=4, alpha=0.8)
     
     # Mark segments with chords
-    y_pos = 50
     for segment in segments:
         if segment['chord'] is not None:
             start = segment['start_beat']
@@ -389,36 +388,80 @@ def create_tolerance_visualization(midi_file, segments, timing_adjustments, outp
             color = 'lightblue' if segment['used_timing_tolerance'] else 'lightgreen'
             plt.axvspan(start, end, alpha=0.3, color=color)
             
-            plt.text((start + end) / 2, y_pos, segment['chord'], 
-                     horizontalalignment='center', fontsize=12, fontweight='bold')
+            # Add chord labels
+            plt.text((start + end) / 2, max(note['pitch'] for note in notes) - 5, 
+                    segment['chord'], 
+                    horizontalalignment='center', fontsize=12, fontweight='bold')
     
     # Highlight beats where timing tolerance was used
     for beat in timing_adjustments:
         plt.axvline(x=beat, color='red', linestyle='--', alpha=0.7, linewidth=1)
-        plt.text(beat, 45, 'T', fontsize=8, ha='center')
+        plt.text(beat, min(note['pitch'] for note in notes) + 2, 'T', 
+                fontsize=10, ha='center', color='red', fontweight='bold')
     
-    plt.xlabel('Time (beats)')
     plt.ylabel('MIDI Pitch')
-    plt.title(f'Chord Analysis - {midi_filename} - Timing Tolerance')
+    plt.xlabel('Time (normalized beats)')
     plt.grid(True, alpha=0.3)
+    plt.xlim(0, 16)
+    
+    # Plot 2: Chord progression timeline
+    plt.subplot(2, 1, 2)
+    plt.title('Detected Chord Progression', fontsize=14, fontweight='bold')
+    
+    chord_colors = {'major': 'lightblue', 'minor': 'lightcoral', 'dominant': 'lightyellow', 'other': 'lightgray'}
+    
+    for i, segment in enumerate(segments):
+        chord = segment['chord']
+        if chord:
+            # Determine chord color
+            if chord.endswith('m') and not chord.endswith('maj'):
+                color = chord_colors['minor']
+            elif '7' in chord and not 'maj' in chord:
+                color = chord_colors['dominant']
+            elif any(ext in chord for ext in ['maj', 'M']):
+                color = chord_colors['major']
+            else:
+                color = chord_colors['major'] if not chord.endswith('m') else chord_colors['minor']
+            
+            plt.barh(0, 2, left=i*2, height=0.5, color=color, alpha=0.7, edgecolor='black')
+            plt.text(i*2 + 1, 0, chord, ha='center', va='center', fontweight='bold')
+    
+    plt.xlim(0, 16)
+    plt.ylim(-0.5, 0.5)
+    plt.ylabel('Chord')
+    plt.xlabel('Time (beats)')
+    plt.yticks([])
+    plt.grid(True, alpha=0.3, axis='x')
     
     # Add legend
-    plt.text(0.02, 0.98, 'Green: Normal timing\nBlue: Timing adjusted\nRed dashed: Early notes detected', 
-             transform=plt.gca().transAxes, verticalalignment='top',
+    legend_text = f"""Legend:
+    Green: Normal timing | Blue: Timing adjusted | Red dashed: Early notes detected
+    Chord progression: {' → '.join([s['chord'] for s in segments if s['chord']])}
+    Timing adjustments: {len(timing_adjustments)} beats"""
+    
+    plt.text(0.02, 0.02, legend_text, transform=plt.gca().transAxes, 
+             verticalalignment='bottom', fontsize=10,
              bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
-    plt.savefig(output_file)
-    print(f"\nVisualization saved as '{output_file}'")
-
-def main():
-    midi_file_path = 'midi_samples/2 4ths.mid'
+    plt.tight_layout()
+    plt.savefig(viz_path, dpi=300, bbox_inches='tight')
+    plt.close()
     
-    print("=== CHORD DETECTION WITH TIMING TOLERANCE ===")
-    progression, segments = analyze_midi_chord_progression(
-        midi_file_path, 
-        segment_size=2, 
-        tolerance_beats=0.15  # 0.15 beats = about 150ms at 100 BPM
-    )
+    print(f"📊 Chord progression visualization saved: {viz_path}")
+    return viz_filename
+
+# Test function
+def test_chord_analysis(midi_file_path):
+    """Test the adapted chord analysis"""
+    result = analyze_chord_progression_with_stretching(midi_file_path)
+    print(f"\n🎵 Test Results:")
+    print(f"   Key: {result['key']}")
+    print(f"   Progression: {' → '.join(result['chord_progression'])}")
+    print(f"   Segments: {len(result['segments'])}")
+    print(f"   Timing tolerance used: {result['tolerance_used']}")
+    return result
 
 if __name__ == "__main__":
-    main()
+    # Test with a MIDI file
+    test_file = "midi_samples/test_chord.mid"
+    test_chord_analysis(test_file)
