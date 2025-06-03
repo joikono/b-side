@@ -606,7 +606,7 @@ const apiBase = "http://localhost:8000";
             this.mode = 'time';
         }
         
-        startRecording(mode = 'time', duration = 9.6) {
+        startRecording(mode = 'time', duration = 10) {
             this.isRecording = true;
             this.recordedNotes = [];
             this.startTime = performance.now();
@@ -1579,7 +1579,7 @@ const apiBase = "http://localhost:8000";
         updateStatus('captureStatus', '🎵 Recording... Play your melody!', 'recording');
         
         // **NEW: GUARANTEED AUTO-STOP after exactly 16 bars (9.6 seconds)**
-        const exactDurationFor16Bars = (16 * 60) / 100; // 16 beats at 100 BPM = 9.6 seconds
+        const exactDurationFor16Bars = 10.1; // 16 beats at 100 BPM = 9.6 seconds
         const autoStopTimeout = setTimeout(() => {
             console.log('⏰ Auto-stopping recording after 16 bars (9.6s)');
             stopCapture(); // This will stop both metronome and MIDI recorder

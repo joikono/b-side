@@ -99,6 +99,8 @@ def force_exactly_8_chords_analysis(midi_path):
             
             # Calculate stretch factor
             stretch_factor = 16.0 / actual_duration
+            stretch_factor *= 0.98  # Try values between 0.95-0.99
+
             offset = music_start
             
             # Normalize and stretch all note timings
