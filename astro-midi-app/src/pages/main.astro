@@ -1,6 +1,7 @@
 ---
 // index.astro - Frontend-Only MIDI Analysis Demo with Integrated Player
 // Perfect audio quality with Web MIDI API + Web Audio API + MIDI Playback
+const title = "🎹 Live MIDI Analysis Demo";
 const apiBase = "http://localhost:8000";
 import CircularWaveform from '../components/circular_waveform.astro';
 ---
@@ -9,76 +10,95 @@ import CircularWaveform from '../components/circular_waveform.astro';
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
     
     <!-- Load the proven html-midi-player library -->
     <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.4.0"></script>
 </head>
-    <body>
-    <!-- Full-Screen Waveform Centerpiece -->
-    <div class="waveform-centerpiece">
-        <div id="progressions" class="progression-overlay"></div>
-        <CircularWaveform 
-            width="100vw"
-            height="100vh"
-            radius="40"
-            maxBarHeight="30"
-            barCount="128"
-            showControls={false}
-            className="spectrum-canvas"
-        />
-    </div>
-
-    <!-- Overlay Controls (Minimal) -->
-    <div class="overlay-controls">
-        <!-- Visualizer status in corner -->
-        <div class="corner-status" id="visualizerStatus">
-            <span class="status-dot" id="audioStatusDot"></span>
-            <span id="audioStatusText">Ready</span>
-        </div>
-    </div>
-
-    <!-- Hidden Content Cards (can be toggled) -->
-    <main class="floating-content" style="display: none;">
+<body>
+    <main>
+        <h1>{title}</h1>
         
-        <!-- Generate Card -->
-        <div class="content-card generate-card">
-            <h3>🎼 Generate Full Arrangement</h3>
+        <!-- Device Connection Section -->
+        <section class="section">
+            <h3>1. Connect MIDI Device</h3>
+            <select id="deviceSelect">
+                <option>Loading devices...</option>
+            </select>
+            <button class="connect-btn" onclick="connectDevice()">Connect Device</button>
+            <button onclick="loadDevices()">🔄 Refresh Devices</button>
+            <div id="midiStatus" class="status ready">Ready to connect</div>
+            
+            <!-- Piano Sound Controls -->
+            <div id="pianoControls" style="display: none; margin-top: 15px;">
+                <label>
+                    Piano Volume: 
+                    <input type="range" id="pianoVolume" min="0" max="100" value="15">
+                    <span id="volumeValue">15%</span>
+                </label>
+                <br>
+                <label>
+                    Piano Sound: 
+                    <select id="pianoSound">
+                        <option value="piano">Piano</option>
+                        <option value="electric">Electric Piano</option>
+                        <option value="organ">Organ</option>
+                        <option value="synth">Synth</option>
+                    </select>
+                </label>
+                <br>
+            </div>
+        </section>
+        <!-- NEW: Dedicated Audio Visualizer Section -->
+        <section class="section visualizer-section">
+            <h3>🌊 Real-time Audio Visualizer</h3>
+            <p>Live visualization of your MIDI performance - connect a device and start playing!</p>
+            
+            <div class="visualizer-container">
+                <CircularWaveform 
+                    height="320px" 
+                    showControls={false}
+                    className="midi-spectrum main-visualizer"
+                />
+                
+                <div class="visualizer-status" id="visualizerStatus">
+                    <span class="status-dot" id="audioStatusDot"></span>
+                    <span id="audioStatusText">Waiting for MIDI connection...</span>
+                    <button onclick="retryVisualizerConnection()" id="retryBtn" style="display: none;">🔄 Retry</button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Capture Controls Section -->
+        <section class="section">
+            <h3>2. Record Your Melody</h3>
             <label>
-                Harmonization Style: 
-                <select id="harmonyStyle">
-                    <option value="simple_pop">Simple/Pop</option>
-                    <option value="folk_acoustic">Folk/Acoustic</option>
-                    <option value="bass_foundation">Bass Foundation</option>
-                    <option value="phrase_foundation">Phrase Foundation</option>
+                Capture Mode: 
+                <select id="captureMode">
+                    <option value="time">Fixed Duration (9.6 seconds)</option>
+                    <option value="silence">Until Silence (2 seconds)</option>
+                    <option value="manual">Manual Stop</option>
                 </select>
             </label>
             <br>
-            <label>
-                Bass Complexity: 
-                <input type="range" id="bassComplexity" min="1" max="3" value="1"> 
-                <span id="bassValue">1</span>
-            </label>
-            <br>
-            <label>
-                Drum Complexity: 
-                <input type="range" id="drumComplexity" min="1" max="3" value="1"> 
-                <span id="drumValue">1</span>
-            </label>
-            <br>
-            
             <div class="button-group">
-                <button class="analyze-btn" onclick="analyzeAndGenerate()">🎼 Generate Full Arrangement</button>
+                <button class="record-btn" onclick="startCapture()">🎹 Start Recording</button>
+                <button class="stop-btn" onclick="stopCapture()">⏹️ Stop Recording</button>
             </div>
-            <div id="analysisStatus" class="status ready">Ready to generate arrangement</div>
-        </div>
+            <div id="captureStatus" class="status ready">Ready to record</div>
+            <div id="beatIndicator" class="beat-indicator">
+                <div class="beat-circle" id="beatCircle"></div>
+                <div class="beat-count" id="beatCount">Ready</div>
+            </div>
+        </section>
         
-        <!-- Results Card -->
-        <div class="content-card results-card" id="results" style="display: none;">
-            <!-- <h3>🎵 Analysis Results</h3>
+        <!-- Results Section - Moved here so user doesn't have to scroll -->
+        <section class="section results" id="results" style="display: none;">
+            <h3>🎵 Analysis Results</h3>
             <div id="keyInfo"></div>
             <div id="progressions"></div>
             <div id="arrangementLink"></div>
-            <div id="visualizationLink" class="visualization"></div> -->
+            <div id="visualizationLink" class="visualization"></div>
             
             <!-- Integrated MIDI Player -->
             <div id="midiPlayerSection" class="midi-player-section" style="display: none;">
@@ -109,367 +129,394 @@ import CircularWaveform from '../components/circular_waveform.astro';
                     </div>
                 </div>
             </div>
-        </div>
-    </main>
-
-    <!-- Sticky MIDI Control Bar -->
-    <div class="midi-control-bar">
-        <div class="midi-bar-content">
-            <!-- MIDI Device Dropdown (centered) -->
-            <div class="midi-device-section">
-                <select id="deviceSelect" class="midi-dropdown" onchange="autoConnect()">
-                    <option value="">Select MIDI Device...</option>
+        </section>
+        
+        <!-- Analysis Options Section -->
+        <section class="section">
+            <h3>3. Generate Full Arrangement</h3>
+            <label>
+                Harmonization Style: 
+                <select id="harmonyStyle">
+                    <option value="simple_pop">Simple/Pop</option>
+                    <option value="folk_acoustic">Folk/Acoustic</option>
+                    <option value="bass_foundation">Bass Foundation</option>
+                    <option value="phrase_foundation">Phrase Foundation</option>
                 </select>
-            </div>
-
-            <!-- Refresh Button (icon only) -->
-            <button class="refresh-btn" onclick="loadDevices()" title="Refresh Devices">
-                🔄
-            </button>
-
-            <!-- Piano Controls (expandable) -->
-            <div class="piano-controls-container">
-                <button class="piano-controls-toggle" onclick="togglePianoControls()" title="Piano Settings">
-                    🎹
-                </button>
-                
-                <!-- Expandable Piano Menu -->
-                <div id="pianoControlsMenu" class="piano-controls-menu">
-                    <div class="control-group">
-                        <label>Volume:</label>
-                        <input type="range" id="pianoVolume" min="0" max="100" value="15" oninput="updateMidiBarVolume(this.value)">
-                        <span id="volumeValue">15%</span>
-                    </div>
-                    <div class="control-group">
-                        <label>Sound:</label>
-                        <select id="pianoSound" onchange="updateMidiBarSound(this.value)">
-                            <option value="piano">Piano</option>
-                            <option value="electric">Electric</option>
-                            <option value="organ">Organ</option>
-                            <option value="synth">Synth</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
+            </label>
+            <br>
+            <label>
+                Bass Complexity: 
+                <input type="range" id="bassComplexity" min="1" max="3" value="1"> 
+                <span id="bassValue">1</span>
+            </label>
+            <br>
+            <label>
+                Drum Complexity: 
+                <input type="range" id="drumComplexity" min="1" max="3" value="1"> 
+                <span id="drumValue">1</span>
+            </label>
+            <br>
+            
             <div class="button-group">
-                <button class="record-btn" onclick="startCapture()">🎹 Start Recording</button>
-                <button class="stop-btn" onclick="cancelRecording()">⏹️ Stop Recording</button>
+                <button class="analyze-btn" onclick="analyzeAndGenerate()">🎼 Generate Full Arrangement</button>
             </div>
-            <div id="captureStatus" class="status ready">Ready to record</div>
-            <div id="beatIndicator" class="beat-indicator">
-                <div class="beat-circle" id="beatCircle"></div>
-                <div class="beat-count" id="beatCount">Ready</div>
-            </div>
-        </div>
-    </div>
+            <div id="analysisStatus" class="status ready">Ready to generate arrangement</div>
+        </section>
+
+    </main>
 </body>
 </html>
 
 <style>
-
-    .circular-spectrum-container {
-        margin: -50px !important;
-        width: calc(100vw + 100px) !important;
-        height: calc(100vh + 100px) !important;
-    }
+    /* Global Styles */
     * {
         box-sizing: border-box;
-        margin: 0;
-        padding: 0;
     }
-
+    
     body {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        height: 100vh;
-        overflow-x: hidden;
-        padding-bottom: 70px; /* Space for sticky bar */
-    }
-
-    .progression-overlay {
-    position: absolute;
-    top: 5%;
-    left: 50%;
-    transform: translateX(-50%);
-    color: white;
-    font-size: 2.5rem;
-    font-weight: bold;
-    text-align: center;
-    z-index: 10;
-    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9);
-    font-family: 'Oswald', monospace;
-    padding: 20px;
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    max-width: 100vw;
-    word-wrap: break-word;
-    }
-
-    /* Full-Screen Waveform Centerpiece */
-    .waveform-centerpiece {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: 1;
-        background: linear-gradient(135deg, #0a0a0a, #1a1a2e, #16213e);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    /* Override the component's container to be truly full-screen */
-    .circular-spectrum-container {
-        border-radius: 0 !important;
-        border: none !important;
-        box-shadow: none !important;
-        background: transparent !important;
-        overflow: visible !important;
-    }
-
-    canvas.spectrum-canvas {
-        width: 100vw !important;
-        height: 100vh !important;
-        min-width: 1000px !important;
-        min-height: 600px !important;
-    }
-
-    /* Make sure the canvas fills everything */
-    .circular-spectrum-container .spectrum-canvas {
-        border-radius: 0 !important;
-    }
-
-    /* Also remove the section wrapper styles if you still have them */
-    .large-waveform-section {
-        border-radius: 0 !important;
-        border: none !important;
-        box-shadow: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    .main-visualizer {
-        width: 100% !important;
-        height: 100vh !important;
-        opacity: 1 !important; /* Full opacity - make it the star */
-    }
-
-
-    /* Overlay Controls */
-    .overlay-controls {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: 2;
-        pointer-events: none; /* Allow clicks to pass through */
-    }
-
-    .overlay-controls > * {
-        pointer-events: auto; /* Re-enable clicks on child elements */
-    }
-
-    /* Corner Status */
-    .corner-status {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 8px 15px;
-        border-radius: 20px;
-        backdrop-filter: blur(10px);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #95a5a6;
-        transition: all 0.3s ease;
-    }
-
-    .status-dot.connected {
-        background: #27ae60;
-        box-shadow: 0 0 10px rgba(39, 174, 96, 0.5);
-        animation: pulse 2s infinite;
-    }
-
-    /* Floating Content */
-    .floating-content {
-        position: relative;
-        z-index: 1;
-        min-height: calc(100vh - 70px);
+        max-width: 900px;
+        margin: 0 auto;
         padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        align-items: center;
+        background-color: #000000;
+        line-height: 1.6;
     }
-
-    /* Content Cards */
-    .content-card {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(20px);
-        border-radius: 20px;
+    
+    main {
+        background: rgb(39, 13, 82);
+        border-radius: 12px;
         padding: 30px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        max-width: 600px;
-        width: 100%;
-        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
-
-    .content-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
-    }
-
-    .content-card h3 {
-        color: #2c3e50;
-        margin-bottom: 20px;
+    
+    h1 {
+        color: #ffffff;
         text-align: center;
-        font-size: 1.5rem;
+        margin-bottom: 30px;
+        font-size: 2.2rem;
     }
-
-    .content-card h4 {
-        color: #2c3e50;
+    
+    h3 {
+        color: #ffffff;
         margin-bottom: 15px;
+        border-bottom: 2px solid #ecf0f1;
+        padding-bottom: 8px;
+    }
+    
+    h4 {
+        color: #ffffff;
+        margin-bottom: 10px;
         font-size: 1.3rem;
     }
-
-    /* Card-specific styling */
-    .record-card {
-        background: linear-gradient(135deg, rgba(52, 152, 219, 0.95), rgba(155, 89, 182, 0.95));
-        color: white;
+    
+    h5 {
+        color: #ffffff;
+        margin-bottom: 8px;
+        font-size: 1rem;
     }
-
-    .record-card h3,
-    .record-card label {
-        color: white;
+    
+    /* Section Styles */
+    .section {
+        margin: 25px 0;
+        padding: 20px;
+        border: 1px solid #e1e8ed;
+        border-radius: 12px;
+        background: #0a69c7;
+        transition: box-shadow 0.3s ease;
     }
-
-    .generate-card {
-        background: linear-gradient(135deg, rgba(230, 126, 34, 0.95), rgba(231, 76, 60, 0.95));
-        color: white;
+    
+    .section:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
-
-    .generate-card h3,
-    .generate-card label {
-        color: white;
-    }
-
-    .results-card {
-        background: linear-gradient(135deg, rgba(39, 174, 96, 0.95), rgba(46, 204, 113, 0.95));
-        color: white;
-        max-width: 800px;
-    }
-
-    .results-card h3,
-    .results-card h4,
-    .results-card label {
-        color: white;
-    }
-
-    /* Form Elements */
-    label {
-        display: block;
-        margin: 15px 0;
-        font-weight: 500;
-    }
-
-    select, input[type="range"] {
-        padding: 10px;
-        margin: 8px 5px;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-radius: 10px;
-        font-size: 14px;
-        background: rgba(255, 255, 255, 0.9);
-        color: #2c3e50;
-    }
-
+    
     /* Button Styles */
     button {
-        padding: 12px 20px;
+        padding: 12px 18px;
         margin: 5px;
         border: none;
-        border-radius: 10px;
+        border-radius: 8px;
         cursor: pointer;
         font-weight: 600;
         transition: all 0.3s ease;
         font-size: 14px;
     }
-
+    
     button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
-
+    
+    button:active {
+        transform: translateY(0);
+    }
+    
+    .connect-btn {
+        background: linear-gradient(45deg, #4CAF50, #45a049);
+        color: white;
+    }
+    
     .record-btn {
-        background: linear-gradient(45deg, #3498db, #2980b9);
+        background: linear-gradient(45deg, #2196F3, #1976D2);
         color: white;
     }
-
+    
     .stop-btn {
-        background: linear-gradient(45deg, #e74c3c, #c0392b);
+        background: linear-gradient(45deg, #f44336, #d32f2f);
         color: white;
     }
-
+    
     .analyze-btn {
-        background: linear-gradient(45deg, #f39c12, #e67e22);
+        background: linear-gradient(45deg, #FF9800, #f57c00);
         color: white;
     }
-
-    .button-group {
-        display: flex;
-        justify-content: center;
-        gap: 10px;
-        margin: 20px 0;
+    
+    .melody-btn {
+        background: linear-gradient(45deg, #9C27B0, #7b1fa2);
+        color: white;
     }
-
+    
+    .midi-btn {
+        background: linear-gradient(45deg, #00BCD4, #0097A7);
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+    }
+    
+    /* Form Controls */
+    select, input[type="range"] {
+        padding: 10px;
+        margin: 8px 5px;
+        border: 2px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: border-color 0.3s ease;
+    }
+    
+    select:focus, input:focus {
+        outline: none;
+        border-color: #4CAF50;
+        box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+    }
+    
+    input[type="range"] {
+        -webkit-appearance: none;
+        height: 8px;
+        border-radius: 4px;
+        background: #ddd;
+        outline: none;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #4CAF50;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    input[type="range"]::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #4CAF50;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        border: none;
+    }
+    
+    label {
+        display: block;
+        margin: 10px 0;
+        font-weight: 500;
+        color: #ffffff;
+    }
+    
     /* Status Styles */
     .status {
-        padding: 15px;
+        padding: 12px;
         margin: 15px 0;
-        border-radius: 10px;
+        border-radius: 8px;
         font-weight: 500;
-        text-align: center;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        background: rgba(255, 255, 255, 0.2);
+        border-left: 4px solid #ccc;
+        transition: all 0.3s ease;
     }
-
+    
     .status.ready {
-        background: rgba(46, 204, 113, 0.2);
-        border-color: rgba(46, 204, 113, 0.5);
+        background: linear-gradient(135deg, #e8f5e8, #f0f8f0);
+        border-left-color: #4CAF50;
+        color: #2e7d32;
     }
-
+    
     .status.recording {
-        background: rgba(255, 193, 7, 0.2);
-        border-color: rgba(255, 193, 7, 0.5);
+        background: linear-gradient(135deg, #fff3cd, #fdf6d8);
+        border-left-color: #ff9800;
+        color: #e65100;
         animation: pulse 2s infinite;
     }
-
+    
     .status.analyzing {
-        background: rgba(52, 152, 219, 0.2);
-        border-color: rgba(52, 152, 219, 0.5);
+        background: linear-gradient(135deg, #d1ecf1, #e3f2fd);
+        border-left-color: #2196F3;
+        color: #0277bd;
     }
-
+    
     .status.error {
-        background: rgba(231, 76, 60, 0.2);
-        border-color: rgba(231, 76, 60, 0.5);
+        background: linear-gradient(135deg, #f8d7da, #fce4e6);
+        border-left-color: #f44336;
+        color: #c62828;
     }
-
+    
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.7; }
     }
-
+    
+    /* Results Styles */
+    .results {
+        background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+    }
+    
+    .chord-progression {
+        font-family: 'Courier New', monospace;
+        font-size: 16px;
+        background: #2c3e50;
+        color: #ecf0f1;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 8px;
+        border-left: 4px solid #3498db;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+    
+    .button-group {
+        margin: 15px 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .visualization {
+        margin: 15px 0;
+        padding: 15px;
+        background: #fff;
+        border-radius: 8px;
+        border: 1px solid #e1e8ed;
+    }
+    
+    /* MIDI Player Styles */
+    .midi-player-section {
+        margin-top: 30px;
+        padding: 25px;
+        background: linear-gradient(135deg, #02253b, #000000);
+        border-radius: 15px;
+        border: 2px solid #2196F3;
+        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+    }
+    
+    .player-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    midi-player {
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid rgba(33, 150, 243, 0.3);
+        display: block;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    midi-visualizer {
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 12px;
+        padding: 15px;
+        border: 1px solid rgba(33, 150, 243, 0.3);
+        min-height: 200px;
+        display: block;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .midi-controls {
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid rgba(33, 150, 243, 0.3);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .midi-debug-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+    }
+    
+    #midiPlayerInfo {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        color: #2c3e50;
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+        min-height: 60px;
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+    }
+    
+    /* Responsive Design */
+    @media (max-width: 600px) {
+        body {
+            padding: 10px;
+        }
+        
+        main {
+            padding: 20px;
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+        }
+        
+        .button-group {
+            flex-direction: column;
+        }
+        
+        button {
+            width: 100%;
+        }
+        
+        .chord-progression {
+            font-size: 14px;
+        }
+    }
+    
+    /* Accessibility */
+    @media (prefers-reduced-motion: reduce) {
+        * {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+    
+    /* Focus indicators for keyboard navigation */
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible {
+        outline: 3px solid #4CAF50;
+        outline-offset: 2px;
+    }
+    
     /* Metronome Styles */
     .beat-indicator {
         display: flex;
@@ -477,12 +524,14 @@ import CircularWaveform from '../components/circular_waveform.astro';
         align-items: center;
         margin: 20px 0;
         padding: 20px;
-        background: none;
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-radius: 12px;
+        border: 2px solid #dee2e6;
     }
-
+    
     .beat-circle {
-        width: 40px;
-        height: 40px;
+        width: 80px;
+        height: 80px;
         border-radius: 50%;
         background: linear-gradient(135deg, #6c757d, #495057);
         margin-bottom: 10px;
@@ -492,19 +541,19 @@ import CircularWaveform from '../components/circular_waveform.astro';
         justify-content: center;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     }
-
+    
     .beat-circle.active {
         background: linear-gradient(135deg, #28a745, #20c997);
         transform: scale(1.1);
         box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
     }
-
+    
     .beat-circle.count-in {
         background: linear-gradient(135deg, #ffc107, #fd7e14);
         transform: scale(1.2);
         box-shadow: 0 6px 20px rgba(255, 193, 7, 0.4);
     }
-
+    
     .beat-count {
         font-size: 18px;
         font-weight: bold;
@@ -512,179 +561,42 @@ import CircularWaveform from '../components/circular_waveform.astro';
         min-height: 22px;
         text-align: center;
     }
-
+    
     .beat-count.count-in {
         font-size: 24px;
         color: #e67e22;
         animation: pulse-count 0.6s ease-in-out;
     }
-
+    
     .beat-count.recording {
         color: #28a745;
     }
-
+    
     @keyframes pulse-count {
         0% { transform: scale(1); }
         50% { transform: scale(1.2); }
         100% { transform: scale(1); }
     }
-
-    /* MIDI Player Styles */
-    .midi-player-section {
-        margin-top: 30px;
-        padding: 25px;
-        background: rgba(0, 0, 0, 0.3);
-        border-radius: 15px;
-        border: 2px solid rgba(255, 255, 255, 0.2);
-    }
-
-    midi-player {
-        background: rgba(255, 255, 255, 0.9);
-        border-radius: 12px;
-        padding: 20px;
-        display: block;
-        margin-bottom: 15px;
-    }
-
-    .midi-controls {
-        background: rgba(255, 255, 255, 0.8);
-        border-radius: 12px;
-        padding: 20px;
-    }
-
-    /* Sticky MIDI Control Bar */
-    .midi-control-bar {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 70px;
-        background: linear-gradient(135deg, rgba(44, 62, 80, 0.95), rgba(52, 73, 94, 0.95));
-        border-top: 2px solid #3498db;
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
-        z-index: 1000;
-        backdrop-filter: blur(20px);
-    }
-
-    .midi-bar-content {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 0 20px;
-        gap: 20px;
-    }
-
-    .midi-device-section {
-        display: flex;
-        justify-content: center;
-        width: 200px;
-    }
-
-    .midi-dropdown {
-        width: 100%;
-        padding: 10px 15px;
-        border: 2px solid #3498db;
-        border-radius: 25px;
-        background: rgba(255, 255, 255, 0.9);
-        color: #2c3e50;
-        font-size: 14px;
-        font-weight: 500;
+    
+    /* Checkbox styling */
+    input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        margin-right: 8px;
         cursor: pointer;
-        transition: all 0.3s ease;
-        outline: none;
     }
 
-    .refresh-btn {
-        width: 45px;
-        height: 45px;
-        border: 2px solid #27ae60;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #27ae60, #2ecc71);
-        color: white;
-        font-size: 18px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    /* MIDI Spectrum Integration */
+    .midi-spectrum {
+    --spectrum-accent: #ff9500;
+    --spectrum-bg: linear-gradient(135deg, #1a0a2e 0%, #16213e 100%);
+    border: 1px solid rgba(255, 149, 0, 0.3);
     }
 
-    .piano-controls-container {
-        position: relative;
+    .midi-spectrum .circular-spectrum-container {
+    border-radius: 8px;
     }
-
-    .piano-controls-toggle {
-        width: 45px;
-        height: 45px;
-        border: 2px solid #9b59b6;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #9b59b6, #8e44ad);
-        color: white;
-        font-size: 18px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .piano-controls-menu {
-        position: absolute;
-        bottom: 55px;
-        right: 0;
-        width: 320px;
-        background: white;
-        border: 2px solid #9b59b6;
-        border-radius: 15px;
-        padding: 20px;
-        box-shadow: 0 -5px 25px rgba(0, 0, 0, 0.3);
-        transform: translateY(20px);
-        opacity: 0;
-        visibility: hidden;
-        transition: all 0.3s ease;
-        z-index: 1001;
-    }
-
-    .piano-controls-menu.show {
-        transform: translateY(0);
-        opacity: 1;
-        visibility: visible;
-    }
-
-    .control-group {
-        margin-bottom: 15px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .control-group label {
-        min-width: 60px;
-        font-weight: 600;
-        color: #2c3e50;
-        font-size: 13px;
-        margin: 0;
-    }
-
-    /* Responsive Design */
-    @media (max-width: 768px) {
-        .floating-content {
-            padding: 10px;
-        }
-
-        .content-card {
-            padding: 20px;
-            margin: 0 10px;
-        }
-
-        .button-group {
-            flex-direction: column;
-        }
-    }
-    </style>
+</style>
 
 <script>
     // API Configuration
@@ -697,8 +609,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
     let midiInput;
     let midiRecorder;
     let spectrumInstance = null;
-    let isPianoMenuOpen = false;
-
     
     // MIDI Player variables
     let midiPlayer;
@@ -708,78 +618,17 @@ import CircularWaveform from '../components/circular_waveform.astro';
     const beatsPerLoop = 16;
     let midiCheckLoopInterval;
 
-    // Add these to your existing script section
-    function autoConnect() {
-        const deviceSelect = document.getElementById('deviceSelect');
-        if (deviceSelect.value) {
-            connectDevice(); // Your existing function
-            updateMidiBarStatus('connected', 'Connected');
-        } else {
-            updateMidiBarStatus('ready', 'Ready');
-        }
-    }
-
-    function updateMidiBarStatus(type, message) {
-        const statusDot = document.getElementById('midiStatusDot');
-        const statusText = document.getElementById('midiStatusText');
-        
-        if (statusDot && statusText) {
-            statusDot.classList.remove('connected');
-            statusText.textContent = message;
-            
-            if (type === 'connected') {
-                statusDot.classList.add('connected');
-            }
-        }
-    }
-
-    // Toggle piano controls menu
-    function togglePianoControls() {
-        const menu = document.getElementById('pianoControlsMenu');
-        const toggle = document.querySelector('.piano-controls-toggle');
-        
-        isPianoMenuOpen = !isPianoMenuOpen;
-        
-        if (isPianoMenuOpen) {
-            menu.classList.add('show');
-            toggle.classList.add('active');
-        } else {
-            menu.classList.remove('show');
-            toggle.classList.remove('active');
-        }
-    }
-
-    // Close piano menu when clicking outside
-    document.addEventListener('click', function(event) {
-        const container = document.querySelector('.piano-controls-container');
-        if (!container.contains(event.target) && isPianoMenuOpen) {
-            togglePianoControls();
-        }
-    });
-
-    function updateMidiBarVolume(value) {
-        document.getElementById('volumeValue').textContent = value + '%';
-        // Connect to your existing pianoSynth
-        if (pianoSynth && pianoSynth.setVolume) {
-            pianoSynth.setVolume(value);
-        }
-    }
-
-    function updateMidiBarSound(value) {
-        // Connect to your existing pianoSynth
-        if (pianoSynth && pianoSynth.setSoundType) {
-            pianoSynth.setSoundType(value);
-        }
-    }
-
     // Visualizer Functions
     function retryVisualizerConnection() {
+        console.log('🔄 Manual retry requested');
         updateVisualizerStatus('waiting', 'Retrying connection...');
         spectrumInstance = null;
         
         setTimeout(() => {
             if (connectMidiToSpectrum()) {
+                console.log('✅ Manual retry successful');
             } else {
+                console.log('❌ Manual retry failed');
                 updateVisualizerStatus('error', 'Manual retry failed - check console');
             }
         }, 500);
@@ -816,12 +665,17 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
 
     function connectMidiToSpectrum() {
+        console.log('🔍 Starting connectMidiToSpectrum...');
+        
         if (!spectrumInstance) {
-            const containers = document.querySelectorAll('.circular-spectrum-container');            
+            const containers = document.querySelectorAll('.circular-spectrum-container');
+            console.log('🔍 Found spectrum containers:', containers.length);
+            
             for (let i = 0; i < containers.length; i++) {
                 const container = containers[i];
                 if (container.spectrumInstance) {
                     spectrumInstance = container.spectrumInstance;
+                    console.log('✅ Found spectrum instance in container', i);
                     break;
                 }
             }
@@ -833,6 +687,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
             if (!pianoSynth) missing.push('pianoSynth');
             if (!pianoSynth?.audioContext) missing.push('audioContext');
             
+            console.log('⏳ Missing components:', missing);
             updateVisualizerStatus('waiting', `Missing: ${missing.join(', ')}`);
             return false;
         }
@@ -865,7 +720,8 @@ import CircularWaveform from '../components/circular_waveform.astro';
                 spectrumInstance.updateStatus('MIDI Connected');
             }
             
-            updateVisualizerStatus('connected', 'MIDI audio connected');
+            updateVisualizerStatus('connected', 'MIDI audio connected - play some notes!');
+            console.log('🎹 MIDI audio connected to spectrum successfully');
             return true;
             
         } catch (error) {
@@ -876,22 +732,27 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
 
     function findSpectrumInstance(attempt = 1) {
-
+        console.log(`🔍 Spectrum detection attempt ${attempt}...`);
+        
         const containers = document.querySelectorAll('.circular-spectrum-container');
+        console.log(`🔍 Found ${containers.length} spectrum containers`);
         
         for (let i = 0; i < containers.length; i++) {
             const container = containers[i];
             if (container.spectrumInstance) {
                 spectrumInstance = container.spectrumInstance;
+                console.log('🌊 Spectrum instance found and ready for MIDI connection');
                 updateVisualizerStatus('waiting', 'Spectrum ready - connect MIDI device');
                 return true;
             }
         }
         
         if (attempt < 5) {
+            console.log(`⏳ Spectrum not ready, retry ${attempt + 1}/5 in 1 second...`);
             updateVisualizerStatus('waiting', `Loading visualizer... (${attempt}/5)`);
             setTimeout(() => findSpectrumInstance(attempt + 1), 1000);
         } else {
+            console.log('❌ Spectrum instance not found after 5 attempts');
             updateVisualizerStatus('error', 'Visualizer failed to load - try refresh');
         }
         
@@ -906,11 +767,11 @@ import CircularWaveform from '../components/circular_waveform.astro';
         
         if (!deviceId || deviceId.includes('No MIDI') || deviceId.includes('Error') || deviceId.includes('Web MIDI')) {
             updateStatus('midiStatus', 'Please select a valid MIDI device', 'error');
-            updateMidiBarStatus('error', 'Invalid device');
             return;
         }
         
         if (!midiAccess || !midiAccess.inputs) {
+            console.log('🔄 MIDI access not ready, retrying in 200ms...');
             setTimeout(() => connectDevice(), 200);
             return;
         }
@@ -922,7 +783,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
             
             if (!input) {
                 updateStatus('midiStatus', 'Selected MIDI device not found', 'error');
-                updateMidiBarStatus('error', 'Device not found');
                 return;
             }
             
@@ -930,7 +790,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
             midiInput = input;
             
             updateStatus('midiStatus', '🎹 Piano connected! Studio-quality audio enabled', 'ready');
-            updateMidiBarStatus('connected', 'Connected'); // NEW LINE FOR STICKY BAR
             
             const pianoControls = document.getElementById('pianoControls');
             if (pianoControls) {
@@ -959,7 +818,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
         } catch (error) {
             console.error('Error connecting to MIDI device:', error);
             updateStatus('midiStatus', 'Failed to connect to MIDI device', 'error');
-            updateMidiBarStatus('error', 'Connection failed'); // NEW LINE FOR STICKY BAR
         }
     }
 
@@ -973,8 +831,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
             this.recordingDuration = 0;
             this.silenceTimeout = null;
             this.mode = 'time';
-            this.wasCanceled = false;
-
         }
         
         startRecording(mode = 'time', duration = 10) {
@@ -982,8 +838,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
             this.recordedNotes = [];
             this.startTime = performance.now();
             this.mode = mode;
-            this.recordingDuration = duration * 1000;
-            this.wasCanceled = false;
+            this.recordingDuration = duration * 1000; // Convert to milliseconds
             
             console.log(`🎹 MIDI Recording started (${mode} mode)`);
             
@@ -1014,33 +869,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
             console.log(`🎹 MIDI Recording stopped - Duration: ${totalDuration.toFixed(1)}s, Notes: ${this.recordedNotes.length}`);
             
             return this.recordedNotes;
-        }
-
-        cancelRecording() {
-            if (!this.isRecording) {
-                console.log('🛑 No recording to cancel');
-                return;
-            }
-            
-            this.isRecording = false;
-            this.wasCanceled = true; // Set flag to indicate cancellation
-            
-            if (this.silenceTimeout) {
-                clearTimeout(this.silenceTimeout);
-                this.silenceTimeout = null;
-            }
-            
-            const totalDuration = (performance.now() - this.startTime) / 1000;
-            const noteCount = this.recordedNotes.length;
-            
-            // Clear all recorded data
-            this.recordedNotes = [];
-            this.startTime = null;
-            this.recordingDuration = 0;
-            
-            console.log(`🛑 MIDI Recording canceled - Duration: ${totalDuration.toFixed(1)}s, Notes discarded: ${noteCount}`);
-            
-            return true;
         }
         
         addNote(note, velocity, timestamp, isNoteOn) {
@@ -1174,8 +1002,10 @@ import CircularWaveform from '../components/circular_waveform.astro';
         }
         
         async initAudio() {
+            console.log('🥁 initAudio called'); // ADD THIS
             if (!this.audioContext) {
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                console.log('🥁 Audio context created:', this.audioContext.state); // ADD THIS
                 
                 if (this.audioContext.state === 'suspended') {
                     await this.audioContext.resume();
@@ -1249,6 +1079,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
                 this.nextNoteTime = this.audioContext.currentTime;
                 this.scheduler();
                 
+                console.log(`🥁 Metronome started at ${bpm} BPM${countIn ? ' with count-in' : ''}`);
             } catch (error) {
                 console.error('Error initializing metronome:', error);
                 throw error;
@@ -1314,7 +1145,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
             // Add 3 second buffer to absolutely ensure we don't cut off
             const bufferedDuration = durationFor16Beats + 3.0;
             
-            console.log(`Recording: ${bufferedDuration.toFixed(1)}s (${durationFor16Beats.toFixed(1)}s + 3s buffer) for 16 beats at ${currentTempo} BPM`);
+            console.log(`🎯 EXTENDED recording: ${bufferedDuration.toFixed(1)}s (${durationFor16Beats.toFixed(1)}s + 3s buffer) for 16 beats at ${currentTempo} BPM`);
             
             // Wait a tiny bit to ensure metronome timing is perfect
             setTimeout(() => {
@@ -1362,6 +1193,8 @@ import CircularWaveform from '../components/circular_waveform.astro';
                 if (this.audioContext.state === 'suspended') {
                     await this.audioContext.resume();
                 }
+                
+                console.log('🎹 Enhanced piano synthesizer initialized with controlled reverb');
             }
         }
         
@@ -1605,10 +1438,12 @@ import CircularWaveform from '../components/circular_waveform.astro';
         setReverbAmount(amount) {
             this.reverbAmount = Math.max(0, Math.min(1, amount / 100));
             this.updateReverbMix();
+            console.log(`🎹 Reverb amount changed to: ${(this.reverbAmount * 100).toFixed(0)}%`);
         }
         
         setSoundType(soundType) {
             this.soundType = soundType;
+            console.log(`🎹 Piano sound changed to: ${soundType}`);
         }
         
         testSound() {
@@ -1795,11 +1630,10 @@ import CircularWaveform from '../components/circular_waveform.astro';
     async function loadDevices() {
         try {
             if (!navigator.requestMIDIAccess) {
-                updateMidiBarStatus('error', 'Not supported');
-                
-                const mainSelect = document.getElementById('deviceSelect');
-                if (mainSelect) {
-                    mainSelect.innerHTML = '<option>Web MIDI not supported</option>';
+                updateStatus('midiStatus', 'Web MIDI API not supported in this browser', 'error');
+                const select = document.getElementById('deviceSelect');
+                if (select) {
+                    select.innerHTML = '<option>Web MIDI not supported</option>';
                 }
                 return;
             }
@@ -1807,49 +1641,40 @@ import CircularWaveform from '../components/circular_waveform.astro';
             midiAccess = await navigator.requestMIDIAccess();
             const inputs = Array.from(midiAccess.inputs.values());
             
-            const mainSelect = document.getElementById('deviceSelect');
+            const select = document.getElementById('deviceSelect');
+            if (!select) return;
             
-            if (!mainSelect) return;
-            
-            mainSelect.innerHTML = '';
+            select.innerHTML = '';
             
             if (inputs.length === 0) {
-                mainSelect.innerHTML = '<option value="">No MIDI devices found</option>';
-                updateMidiBarStatus('waiting', 'No devices');
+                select.innerHTML = '<option>No MIDI devices found</option>';
             } else {
-                // Add default option
-                mainSelect.innerHTML = '<option value="">Select MIDI Device...</option>';
-                
-                // Add all devices
                 inputs.forEach((input, index) => {
                     const option = document.createElement('option');
                     option.value = input.id;
                     option.textContent = `${input.name}`;
-                    mainSelect.appendChild(option);
+                    select.appendChild(option);
                 });
                 
-                updateMidiBarStatus('waiting', 'Select device');
-                
-                // SIMPLE AUTO-CONNECT: Back to what was working
+                // AUTO-CONNECT: Automatically connect to the first available device
                 if (inputs.length > 0) {
-                    mainSelect.value = inputs[0].id;
+                    select.value = inputs[0].id;
                     console.log('🎹 Auto-connecting to first MIDI device:', inputs[0].name);
                     
-                    // Single attempt with the original timing
+                    // Small delay to ensure UI is updated, then auto-connect
                     setTimeout(() => {
                         connectDevice();
-                    }, 1000);
+                    }, 100);
                 }
             }
             
             console.log('🎹 Found MIDI inputs:', inputs.length);
         } catch (error) {
             console.error('Error accessing MIDI:', error);
-            updateMidiBarStatus('error', 'Access failed');
-            
-            const mainSelect = document.getElementById('deviceSelect');
-            if (mainSelect) {
-                mainSelect.innerHTML = '<option>Error loading devices</option>';
+            updateStatus('midiStatus', 'Failed to access MIDI devices', 'error');
+            const select = document.getElementById('deviceSelect');
+            if (select) {
+                select.innerHTML = '<option>Error loading devices</option>';
             }
         }
     }
@@ -1887,6 +1712,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
             updateStatus('captureStatus', 'Please connect a MIDI device first', 'error');
             return;
         }
+        
         // Use default values since we removed the UI controls
         const enableMetronome = true; // Always enable metronome
         const tempo = 100; // Fixed tempo at 100 BPM
@@ -1907,7 +1733,10 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
     
     function startDirectCapture(predefinedDuration = null) {
-        const mode = 'time';
+        const captureModeSelect = document.getElementById('captureMode');
+        if (!captureModeSelect) return;
+        
+        const mode = captureModeSelect.value;
         
         let duration;
         if (predefinedDuration) {
@@ -1949,15 +1778,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
                     window.currentAutoStopTimeout = null;
                 }
                 
-                // CHECK THE CANCEL FLAG
-                if (midiRecorder.wasCanceled) {
-                    // Recording was canceled - don't process anything
-                    updateStatus('captureStatus', '🛑 Recording canceled', 'ready');
-                    console.log('🛑 Recording was canceled - no processing');
-                    return;
-                }
-                
-                // Normal completion - process the recording
                 const notes = midiRecorder.recordedNotes;
                 updateStatus('captureStatus', `✅ Recording finished! ${notes.length} MIDI events captured`, 'ready');
                 
@@ -1993,49 +1813,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
         }
         
         updateStatus('captureStatus', '⏹️ Recording stopped', 'ready');
-    }
-
-    function cancelRecording() {
-        console.log('🛑 Canceling recording - no processing will occur');
-        
-        // Clear the auto-stop timeout if it exists
-        if (window.currentAutoStopTimeout) {
-            clearTimeout(window.currentAutoStopTimeout);
-            window.currentAutoStopTimeout = null;
-            console.log('🛑 Cleared auto-stop timeout (canceled)');
-        }
-        
-        // Stop metronome
-        if (metronome) {
-            metronome.stop();
-        }
-        
-        // Stop MIDI recording and clear recorded data
-        if (midiRecorder.isRecording) {
-            midiRecorder.cancelRecording();
-        }
-        
-        // Clear any recorded notes (delete the data)
-        midiRecorder.recordedNotes = [];
-        console.log('🗑️ Cleared recorded MIDI data');
-        
-        // Reset status to ready
-        updateStatus('captureStatus', '🛑 Recording canceled', 'ready');
-        
-        // Clear any previous analysis results from overlay
-        const progressions = document.getElementById('progressions');
-        if (progressions) {
-            progressions.innerHTML = '';
-        }
-        
-        // Reset beat indicator
-        const beatCircle = document.getElementById('beatCircle');
-        const beatCount = document.getElementById('beatCount');
-        if (beatCircle && beatCount) {
-            beatCircle.classList.remove('active', 'count-in');
-            beatCount.classList.remove('count-in', 'recording');
-            beatCount.textContent = 'Ready';
-        }
     }
     
     // Upload recorded MIDI to backend
@@ -2074,62 +1851,117 @@ import CircularWaveform from '../components/circular_waveform.astro';
             updateStatus('captureStatus', 'Failed to upload recorded MIDI', 'error');
         }
     }
-
-    function simplifyChordProgression(chords) {
-        // Check if we have an even number of chords
-        if (chords.length % 2 !== 0) {
-            return chords; // Can't be all pairs if odd number
-        }
-        
-        // Check if all consecutive pairs are the same
-        let allPairs = true;
-        for (let i = 0; i < chords.length; i += 2) {
-            if (chords[i] !== chords[i + 1]) {
-                allPairs = false;
-                break;
-            }
-        }
-        
-        // If all pairs, return simplified version
-        if (allPairs) {
-            const simplified = [];
-            for (let i = 0; i < chords.length; i += 2) {
-                simplified.push(chords[i]);
-            }
-            console.log('🎵 Simplified doubled progression:', chords.join(' → '), 'to:', simplified.join(' → '));
-            return simplified;
-        }
-        
-        return chords; // Return original if not all pairs
-    }
     
+    // Fixed displayAutoAnalysisResults - handles both chord progression and melody responses
     function displayAutoAnalysisResults(result) {
+        const resultsSection = document.getElementById('results');
+        const keyInfo = document.getElementById('keyInfo');
         const progressions = document.getElementById('progressions');
-        if (!progressions) return;
+        const arrangementLink = document.getElementById('arrangementLink');
+        const visualizationLink = document.getElementById('visualizationLink');
         
+        if (!resultsSection || !keyInfo || !progressions || !arrangementLink || !visualizationLink) return;
+        
+        resultsSection.style.display = 'block';
+        
+        console.log('🔍 DEBUG: Full result object:', result);
+        console.log('🔍 DEBUG: Detected type:', result.detected_type);
+        console.log('🔍 DEBUG: Analysis path:', result.analysis_path);
+        
+        // Display key information
         const detectedType = result.detected_type || 'unknown';
+        const analysisPath = result.analysis_path || 'unknown';
+        const key = result.key || 'C';
         
-        let chords = [];
+        keyInfo.innerHTML = 
+            `<strong>Detected Type:</strong> ${detectedType.toUpperCase()}<br>
+            <strong>Analysis Path:</strong> ${analysisPath}<br>
+            <strong>Key:</strong> ${key}`;
         
+        // Handle different response formats based on detection type
         if (detectedType === 'chord_progression') {
-            // CHORD PROGRESSION PATH - Use detected progression
-            chords = result.chord_progression || ['C', 'F', 'G', 'C'];
+            // CHORD PROGRESSION PATH - Single progression
+            console.log('📊 Displaying chord progression results');
+            
+            const chordProgression = result.chord_progression || ['C', 'F', 'G', 'C'];
+            
+            let progressionsHtml = '<h4>🎼 Detected Chord Progression:</h4>';
+            progressionsHtml += `<div style="margin: 10px 0; padding: 15px; border-radius: 8px; background: #e3f2fd;">
+                <strong>Chord Progression:</strong> 
+                <div class="chord-progression">${chordProgression.join(' → ')}</div>
+                <small>Analysis: Direct chord detection from polyphonic input</small>
+            </div>`;
+            
+            // Show chord analysis details if available
+            if (result.chord_analysis) {
+                const segments = result.chord_analysis.segments || [];
+                const timingAdjustments = result.chord_analysis.timing_adjustments || [];
+                
+                progressionsHtml += `<div style="margin: 10px 0; padding: 10px; border-radius: 8px; background: #f5f5f5;">
+                    <small><strong>Analysis Details:</strong><br>
+                    • Segments analyzed: ${segments.length}<br>
+                    • Timing adjustments: ${timingAdjustments.length} beats<br>
+                    • Tolerance used: ${result.chord_analysis.tolerance_used ? 'Yes' : 'No'}</small>
+                </div>`;
+            }
+            
+            progressions.innerHTML = progressionsHtml;
+            
         } else {
-            // MELODY PATH - Use simple/pop harmonization (first option)
-            if (result.harmonizations && result.harmonizations.simple_pop) {
-                chords = result.harmonizations.simple_pop.progression || ['C', 'F', 'G', 'C'];
+            // MELODY PATH - Multiple harmonization options
+            console.log('📊 Displaying melody harmonization results');
+            
+            if (result.harmonizations) {
+                // Calculate max confidence for display
+                const confidences = Object.values(result.harmonizations).map(h => h.confidence || 0);
+                const maxConfidence = Math.max(...confidences) / 100;
+                
+                keyInfo.innerHTML += `<br><strong>Confidence:</strong> ${maxConfidence.toFixed(2)}`;
+                
+                let progressionsHtml = '<h4>🎵 4 Harmonization Options (8 chords each):</h4>';
+                Object.entries(result.harmonizations).forEach(([style, data]) => {
+                    const styleDisplayName = style.replace('_', '/').replace(/\b\w/g, l => l.toUpperCase());
+                    const progression = data.progression || ['C', 'C', 'C', 'C', 'C', 'C', 'C', 'C'];
+                    const confidence = data.confidence || 0;
+                    
+                    progressionsHtml += `<div style="margin: 10px 0; padding: 10px; border-radius: 8px; background: #f0f0f0;">
+                        <strong>${styleDisplayName}:</strong> 
+                        <div class="chord-progression">${progression.join(' → ')}</div>
+                        <small>Confidence: ${confidence.toFixed(1)}% | Forced 8-chord analysis</small>
+                    </div>`;
+                });
+                progressions.innerHTML = progressionsHtml;
             } else {
-                chords = ['C', 'F', 'G', 'C']; // Fallback
+                // Fallback if no harmonizations (shouldn't happen for melody path)
+                progressions.innerHTML = '<h4>⚠️ No harmonization data available</h4>';
             }
         }
         
-        // Apply smart simplification for doubled progressions
-        const simplifiedChords = simplifyChordProgression(chords);
+        // Generic arrangement link
+        arrangementLink.innerHTML = '<em>Use "Generate Full Arrangement" button below to create MIDI arrangement</em>';
         
-        // Display as simple chord progression
-        progressions.innerHTML = simplifiedChords.join(' → ');
+        // Handle visualization links
+        let visualizationHtml = '';
         
-        console.log('✅ Progression displayed:', simplifiedChords.join(' → '));
+        // Chord/Melody detection visualization (always present)
+        if (result.chord_melody_detection && result.chord_melody_detection.download_url) {
+            visualizationHtml += `<strong>🔍 Type Detection:</strong> <a href="${API_BASE}${result.chord_melody_detection.download_url}" target="_blank" rel="noopener">View Detection Analysis</a><br>`;
+        }
+        
+        // Main analysis visualization
+        if (result.visualization && result.visualization.success && result.visualization.download_url) {
+            const vizType = result.visualization.type || 'analysis';
+            const vizLabel = vizType === 'chord_progression' ? 'Chord Progression Chart' : 'Harmonization Options Chart';
+            visualizationHtml += `<strong>📊 ${vizLabel}:</strong> <a href="${API_BASE}${result.visualization.download_url}" target="_blank" rel="noopener">View Analysis Chart</a>`;
+        }
+        
+        if (visualizationHtml) {
+            visualizationLink.innerHTML = visualizationHtml;
+        } else {
+            visualizationLink.innerHTML = '<em>Visualization generation failed</em>';
+        }
+        
+        console.log('✅ Auto-analysis results displayed successfully');
     }
     
     // Fixed analyzeAndGenerate - handles both chord progression and melody results
@@ -2372,14 +2204,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
     window.stopMidi = stopMidi;
     window.toggleMidiLoop = toggleMidiLoop;
     window.retryVisualizerConnection = retryVisualizerConnection;
-    
-    window.togglePianoControls = togglePianoControls;
-    window.autoConnect = autoConnect;
-    window.updateMidiBarVolume = updateMidiBarVolume;
-    window.updateMidiBarSound = updateMidiBarSound;
-    window.updateMidiBarStatus = updateMidiBarStatus;
-
-    window.cancelRecording = cancelRecording;
-    </script>
+</script>
 </body>
 </html>
