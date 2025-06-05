@@ -2,171 +2,230 @@
 // index.astro - Frontend-Only MIDI Analysis Demo with Integrated Player
 // Perfect audio quality with Web MIDI API + Web Audio API + MIDI Playback
 const apiBase = "http://localhost:8000";
-import CircularWaveform from '../components/circular_waveform.astro';
+import CircularWaveform from "../components/circular_waveform.astro";
 ---
 
 <html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    
-    <!-- Load the proven html-midi-player library -->
-    <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.4.0"></script>
-</head>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        <!-- Load the proven html-midi-player library -->
+        <script
+            src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.4.0"
+        ></script>
+    </head>
     <body>
-    <!-- Full-Screen Waveform Centerpiece -->
-    <div class="waveform-centerpiece">
-        <div id="progressions" class="progression-overlay"></div>
-        <CircularWaveform 
-            width="100vw"
-            height="100vh"
-            radius="40"
-            maxBarHeight="30"
-            barCount="128"
-            showControls={false}
-            className="spectrum-canvas"
-        />
-    </div>
-
-    <!-- Overlay Controls (Minimal) -->
-    <div class="overlay-controls">
-        <!-- Visualizer status in corner -->
-        <div class="corner-status" id="visualizerStatus">
-            <span class="status-dot" id="audioStatusDot"></span>
-            <span id="audioStatusText">Ready</span>
+        <!-- Full-Screen Waveform Centerpiece -->
+        <div class="waveform-centerpiece">
+            <div id="progressions" class="progression-overlay"></div>
+            <CircularWaveform
+                width="100vw"
+                height="100vh"
+                radius="40"
+                maxBarHeight="30"
+                barCount="128"
+                showControls={false}
+                className="spectrum-canvas"
+            />
         </div>
-    </div>
 
-    <!-- Hidden Content Cards (can be toggled) -->
-    <main class="floating-content" style="display: none;">
-        
-        <!-- Generate Card -->
-        <div class="content-card generate-card">
-            <h3>🎼 Generate Full Arrangement</h3>
-            <label>
-                Harmonization Style: 
-                <select id="harmonyStyle">
-                    <option value="simple_pop">Simple/Pop</option>
-                    <option value="folk_acoustic">Folk/Acoustic</option>
-                    <option value="bass_foundation">Bass Foundation</option>
-                    <option value="phrase_foundation">Phrase Foundation</option>
-                </select>
-            </label>
-            <br>
-            <label>
-                Bass Complexity: 
-                <input type="range" id="bassComplexity" min="1" max="3" value="1"> 
-                <span id="bassValue">1</span>
-            </label>
-            <br>
-            <label>
-                Drum Complexity: 
-                <input type="range" id="drumComplexity" min="1" max="3" value="1"> 
-                <span id="drumValue">1</span>
-            </label>
-            <br>
-            
-            <div class="button-group">
-                <button class="analyze-btn" onclick="analyzeAndGenerate()">🎼 Generate Full Arrangement</button>
+        <!-- Overlay Controls (Minimal) -->
+        <div class="overlay-controls">
+            <!-- Visualizer status in corner -->
+            <div class="corner-status" id="visualizerStatus">
+                <span class="status-dot" id="audioStatusDot"></span>
+                <span id="audioStatusText">Ready</span>
             </div>
-            <div id="analysisStatus" class="status ready">Ready to generate arrangement</div>
         </div>
-        
-        <!-- Results Card -->
-        <div class="content-card results-card" id="results" style="display: none;">
-            <!-- <h3>🎵 Analysis Results</h3>
-            <div id="keyInfo"></div>
-            <div id="progressions"></div>
-            <div id="arrangementLink"></div>
-            <div id="visualizationLink" class="visualization"></div> -->
-            
-            <!-- Integrated MIDI Player -->
-            <div id="midiPlayerSection" class="midi-player-section" style="display: none;">
-                <h4>🎵 Play Your Generated Arrangement</h4>
-                <p>Listen to your AI-generated arrangement with seamless 16-beat looping</p>
-                
-                <div class="player-container">
-                    <!-- MIDI player with native loop attribute -->
-                    <midi-player 
-                        id="arrangementPlayer"
-                        src="" 
-                        sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
-                        visualizer="#myVisualizer"
-                        loop>
-                    </midi-player>                
-                    <!-- Custom controls for the player -->
-                    <div class="midi-controls">
-                        <div class="button-row">
-                            <button onclick="toggleMidiPlay()" class="midi-btn">⏯️ Play/Pause</button>
-                            <button onclick="stopMidi()" class="midi-btn">⏹️ Stop</button>
-                            <button onclick="toggleMidiLoop()" class="midi-btn">🔄 <span id="midiLoopStatus">Loop: OFF</span></button>
-                        </div>
-                        
-                        <div class="midi-debug-info">
-                            <h5>🔍 Playback Info:</h5>
-                            <div id="midiPlayerInfo">Player ready...</div>
+
+        <!-- Hidden Content Cards (can be toggled) -->
+        <main class="floating-content" style="display: none;">
+            <!-- Generate Card -->
+            <div class="content-card generate-card">
+                <h3>🎼 Generate Full Arrangement</h3>
+                <label>
+                    Harmonization Style:
+                    <select id="harmonyStyle">
+                        <option value="simple_pop">Simple/Pop</option>
+                        <option value="folk_acoustic">Folk/Acoustic</option>
+                        <option value="bass_foundation">Bass Foundation</option>
+                        <option value="phrase_foundation"
+                            >Phrase Foundation</option
+                        >
+                    </select>
+                </label>
+                <br />
+                <label>
+                    Bass Complexity:
+                    <input
+                        type="range"
+                        id="bassComplexity"
+                        min="1"
+                        max="3"
+                        value="1"
+                    />
+                    <span id="bassValue">1</span>
+                </label>
+                <br />
+                <label>
+                    Drum Complexity:
+                    <input
+                        type="range"
+                        id="drumComplexity"
+                        min="1"
+                        max="3"
+                        value="1"
+                    />
+                    <span id="drumValue">1</span>
+                </label>
+                <br />
+
+                <div class="button-group">
+                    <button class="analyze-btn" onclick="analyzeAndGenerate()"
+                        >🎼 Generate Full Arrangement</button
+                    >
+                </div>
+                <div id="analysisStatus" class="status ready">
+                    Ready to generate arrangement
+                </div>
+            </div>
+
+            <!-- Results Card -->
+            <div
+                class="content-card results-card"
+                id="results"
+                style="display: none;"
+            >
+                <!-- Integrated MIDI Player -->
+                <div
+                    id="midiPlayerSection"
+                    class="midi-player-section"
+                    style="display: none;"
+                >
+                    <h4>🎵 Play Your Generated Arrangement</h4>
+                    <p>
+                        Listen to your AI-generated arrangement with seamless
+                        16-beat looping
+                    </p>
+
+                    <div class="player-container">
+                        <!-- MIDI player with native loop attribute -->
+                        <midi-player
+                            id="arrangementPlayer"
+                            src=""
+                            sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
+                            visualizer="#myVisualizer"
+                            loop
+                        >
+                        </midi-player>
+                        <!-- Custom controls for the player -->
+                        <div class="midi-controls">
+                            <div class="button-row">
+                                <button
+                                    onclick="toggleMidiPlay()"
+                                    class="midi-btn">⏯️ Play/Pause</button
+                                >
+                                <button onclick="stopMidi()" class="midi-btn"
+                                    >⏹️ Stop</button
+                                >
+                                <button
+                                    onclick="toggleMidiLoop()"
+                                    class="midi-btn"
+                                    >🔄 <span id="midiLoopStatus"
+                                        >Loop: OFF</span
+                                    ></button
+                                >
+                            </div>
+
+                            <div class="midi-debug-info">
+                                <h5>🔍 Playback Info:</h5>
+                                <div id="midiPlayerInfo">Player ready...</div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </main>
+        </main>
 
-    <!-- Sticky MIDI Control Bar -->
-    <div class="midi-control-bar">
-        <div class="midi-bar-content">
-            <!-- MIDI Device Dropdown (centered) -->
-            <div class="midi-device-section">
-                <select id="deviceSelect" class="midi-dropdown" onchange="autoConnect()">
-                    <option value="">Select MIDI Device...</option>
-                </select>
-            </div>
-
-            <!-- Refresh Button (icon only) -->
-            <button class="refresh-btn" onclick="loadDevices()" title="Refresh Devices">
-                🔄
-            </button>
-
-            <!-- Piano Controls (expandable) -->
-            <div class="piano-controls-container">
-                <button class="piano-controls-toggle" onclick="togglePianoControls()" title="Piano Settings">
-                    🎹
-                </button>
-                
-                <!-- Expandable Piano Menu -->
-                <div id="pianoControlsMenu" class="piano-controls-menu">
-                    <div class="control-group">
-                        <label>Volume:</label>
-                        <input type="range" id="pianoVolume" min="0" max="100" value="15" oninput="updateMidiBarVolume(this.value)">
-                        <span id="volumeValue">15%</span>
-                    </div>
-                    <div class="control-group">
-                        <label>Sound:</label>
-                        <select id="pianoSound" onchange="updateMidiBarSound(this.value)">
-                            <option value="piano">Piano</option>
-                            <option value="electric">Electric</option>
-                            <option value="organ">Organ</option>
-                            <option value="synth">Synth</option>
-                        </select>
+        <!-- Sticky MIDI Control Bar -->
+        <div class="midi-control-bar">
+            <div class="midi-bar-content">
+                <!-- Piano Controls (expandable) -->
+                <div class="piano-controls-container">
+                    <button
+                        class="piano-controls-toggle"
+                        onclick="togglePianoControls()"
+                        title="Piano Settings"
+                    >
+                        🎹
+                    </button>
+                    <!-- Expandable Piano Menu -->
+                    <div id="pianoControlsMenu" class="piano-controls-menu">
+                        <div class="midi-device-section">
+                            <select
+                                id="deviceSelect"
+                                class="midi-dropdown"
+                                onchange="autoConnect()"
+                            >
+                                <option value="">Select MIDI Device...</option>
+                            </select>
+                            <button
+                                class="refresh-btn"
+                                onclick="loadDevices()"
+                                title="Refresh Devices"
+                            >
+                                🔄
+                            </button>
+                        </div>
+                        <div class="control-group">
+                            <label>Volume:</label>
+                            <input
+                                type="range"
+                                id="pianoVolume"
+                                min="0"
+                                max="100"
+                                value="15"
+                                oninput="updateMidiBarVolume(this.value)"
+                            />
+                            <span id="volumeValue">15%</span>
+                        </div>
+                        <div class="control-group">
+                            <label>Sound:</label>
+                            <select
+                                id="pianoSound"
+                                onchange="updateMidiBarSound(this.value)"
+                            >
+                                <option value="piano">Piano</option>
+                                <option value="electric">Electric</option>
+                                <option value="organ">Organ</option>
+                                <option value="synth">Synth</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="button-group">
-                <button class="record-btn" onclick="startCapture()">🎹 Start Recording</button>
-                <button class="stop-btn" onclick="cancelRecording()">⏹️ Stop Recording</button>
-            </div>
-            <div id="captureStatus" class="status ready">Ready to record</div>
-            <div id="beatIndicator" class="beat-indicator">
-                <div class="beat-circle" id="beatCircle"></div>
-                <div class="beat-count" id="beatCount">Ready</div>
+                <div class="button-group">
+                    <button
+                        id="recordToggleBtn"
+                        class="record-btn"
+                        onclick="toggleRecording()"
+                    >
+                        🎙️
+                    </button>
+                </div>
+                <div id="captureStatus" class="status ready">
+                    Ready to record
+                </div>
+                <div id="beatIndicator" class="beat-indicator">
+                    <div class="beat-circle" id="beatCircle"></div>
+                    <div class="beat-count" id="beatCount"></div>
+                </div>
             </div>
         </div>
-    </div>
-</body>
+    </body>
 </html>
 
 <style>
-
     .circular-spectrum-container {
         margin: -50px !important;
         width: calc(100vw + 100px) !important;
@@ -179,29 +238,29 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
 
     body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         height: 100vh;
         overflow-x: hidden;
         padding-bottom: 70px; /* Space for sticky bar */
     }
 
     .progression-overlay {
-    position: absolute;
-    top: 5%;
-    left: 50%;
-    transform: translateX(-50%);
-    color: white;
-    font-size: 2.5rem;
-    font-weight: bold;
-    text-align: center;
-    z-index: 10;
-    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9);
-    font-family: 'Oswald', monospace;
-    padding: 20px;
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    max-width: 100vw;
-    word-wrap: break-word;
+        position: absolute;
+        top: 5%;
+        left: 50%;
+        transform: translateX(-50%);
+        color: white;
+        font-size: 2.5rem;
+        font-weight: bold;
+        text-align: center;
+        z-index: 10;
+        text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9);
+        font-family: "Oswald", monospace;
+        padding: 20px;
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+        max-width: 100vw;
+        word-wrap: break-word;
     }
 
     /* Full-Screen Waveform Centerpiece */
@@ -253,7 +312,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
         height: 100vh !important;
         opacity: 1 !important; /* Full opacity - make it the star */
     }
-
 
     /* Overlay Controls */
     .overlay-controls {
@@ -346,7 +404,11 @@ import CircularWaveform from '../components/circular_waveform.astro';
 
     /* Card-specific styling */
     .record-card {
-        background: linear-gradient(135deg, rgba(52, 152, 219, 0.95), rgba(155, 89, 182, 0.95));
+        background: linear-gradient(
+            135deg,
+            rgba(52, 152, 219, 0.95),
+            rgba(155, 89, 182, 0.95)
+        );
         color: white;
     }
 
@@ -356,7 +418,11 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
 
     .generate-card {
-        background: linear-gradient(135deg, rgba(230, 126, 34, 0.95), rgba(231, 76, 60, 0.95));
+        background: linear-gradient(
+            135deg,
+            rgba(230, 126, 34, 0.95),
+            rgba(231, 76, 60, 0.95)
+        );
         color: white;
     }
 
@@ -366,7 +432,11 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
 
     .results-card {
-        background: linear-gradient(135deg, rgba(39, 174, 96, 0.95), rgba(46, 204, 113, 0.95));
+        background: linear-gradient(
+            135deg,
+            rgba(39, 174, 96, 0.95),
+            rgba(46, 204, 113, 0.95)
+        );
         color: white;
         max-width: 800px;
     }
@@ -384,7 +454,8 @@ import CircularWaveform from '../components/circular_waveform.astro';
         font-weight: 500;
     }
 
-    select, input[type="range"] {
+    select,
+    input[type="range"] {
         padding: 10px;
         margin: 8px 5px;
         border: 2px solid rgba(255, 255, 255, 0.3);
@@ -412,12 +483,12 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
 
     .record-btn {
-        background: linear-gradient(45deg, #3498db, #2980b9);
+        background: linear-gradient(45deg, #ffffff, #ffffff);
         color: white;
     }
 
     .stop-btn {
-        background: linear-gradient(45deg, #e74c3c, #c0392b);
+        background: linear-gradient(45deg, #ffffff, #ffffff);
         color: white;
     }
 
@@ -466,8 +537,13 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
 
     @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
+        0%,
+        100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.7;
+        }
     }
 
     /* Metronome Styles */
@@ -475,8 +551,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
         display: flex;
         flex-direction: column;
         align-items: center;
-        margin: 20px 0;
-        padding: 20px;
+        padding-top: 30px;
         background: none;
     }
 
@@ -524,9 +599,15 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
 
     @keyframes pulse-count {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.2); }
-        100% { transform: scale(1); }
+        0% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.2);
+        }
+        100% {
+            transform: scale(1);
+        }
     }
 
     /* MIDI Player Styles */
@@ -559,7 +640,11 @@ import CircularWaveform from '../components/circular_waveform.astro';
         left: 0;
         right: 0;
         height: 70px;
-        background: linear-gradient(135deg, rgba(44, 62, 80, 0.95), rgba(52, 73, 94, 0.95));
+        background: linear-gradient(
+            135deg,
+            rgba(44, 62, 80, 0.95),
+            rgba(52, 73, 94, 0.95)
+        );
         border-top: 2px solid #3498db;
         box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
         z-index: 1000;
@@ -684,12 +769,14 @@ import CircularWaveform from '../components/circular_waveform.astro';
             flex-direction: column;
         }
     }
-    </style>
+</style>
 
 <script>
+    // @ts-nocheck
+
     // API Configuration
-    const API_BASE = 'http://localhost:8000';
-    
+    const API_BASE = "http://localhost:8000";
+
     // Global variables
     let metronome;
     let pianoSynth;
@@ -699,7 +786,6 @@ import CircularWaveform from '../components/circular_waveform.astro';
     let spectrumInstance = null;
     let isPianoMenuOpen = false;
 
-    
     // MIDI Player variables
     let midiPlayer;
     let isMidiLooping = false;
@@ -710,55 +796,55 @@ import CircularWaveform from '../components/circular_waveform.astro';
 
     // Add these to your existing script section
     function autoConnect() {
-        const deviceSelect = document.getElementById('deviceSelect');
+        const deviceSelect = document.getElementById("deviceSelect");
         if (deviceSelect.value) {
             connectDevice(); // Your existing function
-            updateMidiBarStatus('connected', 'Connected');
+            updateMidiBarStatus("connected", "Connected");
         } else {
-            updateMidiBarStatus('ready', 'Ready');
+            updateMidiBarStatus("ready", "");
         }
     }
 
     function updateMidiBarStatus(type, message) {
-        const statusDot = document.getElementById('midiStatusDot');
-        const statusText = document.getElementById('midiStatusText');
-        
+        const statusDot = document.getElementById("midiStatusDot");
+        const statusText = document.getElementById("midiStatusText");
+
         if (statusDot && statusText) {
-            statusDot.classList.remove('connected');
+            statusDot.classList.remove("connected");
             statusText.textContent = message;
-            
-            if (type === 'connected') {
-                statusDot.classList.add('connected');
+
+            if (type === "connected") {
+                statusDot.classList.add("connected");
             }
         }
     }
 
     // Toggle piano controls menu
     function togglePianoControls() {
-        const menu = document.getElementById('pianoControlsMenu');
-        const toggle = document.querySelector('.piano-controls-toggle');
-        
+        const menu = document.getElementById("pianoControlsMenu");
+        const toggle = document.querySelector(".piano-controls-toggle");
+
         isPianoMenuOpen = !isPianoMenuOpen;
-        
+
         if (isPianoMenuOpen) {
-            menu.classList.add('show');
-            toggle.classList.add('active');
+            menu.classList.add("show");
+            toggle.classList.add("active");
         } else {
-            menu.classList.remove('show');
-            toggle.classList.remove('active');
+            menu.classList.remove("show");
+            toggle.classList.remove("active");
         }
     }
 
     // Close piano menu when clicking outside
-    document.addEventListener('click', function(event) {
-        const container = document.querySelector('.piano-controls-container');
+    document.addEventListener("click", function (event) {
+        const container = document.querySelector(".piano-controls-container");
         if (!container.contains(event.target) && isPianoMenuOpen) {
             togglePianoControls();
         }
     });
 
     function updateMidiBarVolume(value) {
-        document.getElementById('volumeValue').textContent = value + '%';
+        document.getElementById("volumeValue").textContent = value + "%";
         // Connect to your existing pianoSynth
         if (pianoSynth && pianoSynth.setVolume) {
             pianoSynth.setVolume(value);
@@ -774,50 +860,55 @@ import CircularWaveform from '../components/circular_waveform.astro';
 
     // Visualizer Functions
     function retryVisualizerConnection() {
-        updateVisualizerStatus('waiting', 'Retrying connection...');
+        updateVisualizerStatus("waiting", "Retrying connection...");
         spectrumInstance = null;
-        
+
         setTimeout(() => {
             if (connectMidiToSpectrum()) {
             } else {
-                updateVisualizerStatus('error', 'Manual retry failed - check console');
+                updateVisualizerStatus(
+                    "error",
+                    "Manual retry failed - check console",
+                );
             }
         }, 500);
     }
 
     function updateVisualizerStatus(status, message) {
-        const statusDot = document.getElementById('audioStatusDot');
-        const statusText = document.getElementById('audioStatusText');
-        const retryBtn = document.getElementById('retryBtn');
-        
+        const statusDot = document.getElementById("audioStatusDot");
+        const statusText = document.getElementById("audioStatusText");
+        const retryBtn = document.getElementById("retryBtn");
+
         if (statusDot && statusText) {
-            statusDot.classList.remove('connected', 'active');
-            
+            statusDot.classList.remove("connected", "active");
+
             switch (status) {
-                case 'connected':
-                    statusDot.classList.add('connected');
-                    if (retryBtn) retryBtn.style.display = 'none';
+                case "connected":
+                    statusDot.classList.add("connected");
+                    if (retryBtn) retryBtn.style.display = "none";
                     break;
-                case 'active':
-                    statusDot.classList.add('active');
-                    if (retryBtn) retryBtn.style.display = 'none';
+                case "active":
+                    statusDot.classList.add("active");
+                    if (retryBtn) retryBtn.style.display = "none";
                     break;
-                case 'error':
-                    if (retryBtn) retryBtn.style.display = 'inline-block';
+                case "error":
+                    if (retryBtn) retryBtn.style.display = "inline-block";
                     break;
-                case 'waiting':
+                case "waiting":
                 default:
-                    if (retryBtn) retryBtn.style.display = 'none';
+                    if (retryBtn) retryBtn.style.display = "none";
                     break;
             }
-            
+
             statusText.textContent = message;
         }
     }
 
     function connectMidiToSpectrum() {
         if (!spectrumInstance) {
-            const containers = document.querySelectorAll('.circular-spectrum-container');            
+            const containers = document.querySelectorAll(
+                ".circular-spectrum-container",
+            );
             for (let i = 0; i < containers.length; i++) {
                 const container = containers[i];
                 if (container.spectrumInstance) {
@@ -826,145 +917,186 @@ import CircularWaveform from '../components/circular_waveform.astro';
                 }
             }
         }
-        
+
         if (!spectrumInstance || !pianoSynth || !pianoSynth.audioContext) {
             const missing = [];
-            if (!spectrumInstance) missing.push('spectrumInstance');
-            if (!pianoSynth) missing.push('pianoSynth');
-            if (!pianoSynth?.audioContext) missing.push('audioContext');
-            
-            updateVisualizerStatus('waiting', `Missing: ${missing.join(', ')}`);
+            if (!spectrumInstance) missing.push("spectrumInstance");
+            if (!pianoSynth) missing.push("pianoSynth");
+            if (!pianoSynth?.audioContext) missing.push("audioContext");
+
+            updateVisualizerStatus("waiting", `Missing: ${missing.join(", ")}`);
             return false;
         }
-        
+
         try {
             const tapGain = pianoSynth.audioContext.createGain();
             tapGain.gain.value = 1.0;
-            
+
             pianoSynth.masterGain.connect(tapGain);
-            
+
             if (!spectrumInstance.audioContext) {
                 spectrumInstance.audioContext = pianoSynth.audioContext;
             }
-            
+
             if (!spectrumInstance.analyser) {
-                spectrumInstance.analyser = pianoSynth.audioContext.createAnalyser();
+                spectrumInstance.analyser =
+                    pianoSynth.audioContext.createAnalyser();
                 spectrumInstance.analyser.fftSize = 512;
                 spectrumInstance.analyser.smoothingTimeConstant = 0.8;
             }
-            
+
             tapGain.connect(spectrumInstance.analyser);
-            spectrumInstance.dataArray = new Uint8Array(spectrumInstance.analyser.frequencyBinCount);
+            spectrumInstance.dataArray = new Uint8Array(
+                spectrumInstance.analyser.frequencyBinCount,
+            );
             spectrumInstance.isAudioActive = true;
-            
-            if (typeof spectrumInstance.setStatusActive === 'function') {
+
+            if (typeof spectrumInstance.setStatusActive === "function") {
                 spectrumInstance.setStatusActive(true);
             }
-            
-            if (typeof spectrumInstance.updateStatus === 'function') {
-                spectrumInstance.updateStatus('MIDI Connected');
+
+            if (typeof spectrumInstance.updateStatus === "function") {
+                spectrumInstance.updateStatus("MIDI Connected");
             }
-            
-            updateVisualizerStatus('connected', 'MIDI audio connected');
+
+            updateVisualizerStatus("connected", "MIDI audio connected");
             return true;
-            
         } catch (error) {
-            console.error('❌ Failed to connect MIDI to spectrum:', error);
-            updateVisualizerStatus('error', `Connection failed: ${error.message}`);
+            console.error("❌ Failed to connect MIDI to spectrum:", error);
+            updateVisualizerStatus(
+                "error",
+                `Connection failed: ${error.message}`,
+            );
             return false;
         }
     }
 
     function findSpectrumInstance(attempt = 1) {
+        const containers = document.querySelectorAll(
+            ".circular-spectrum-container",
+        );
 
-        const containers = document.querySelectorAll('.circular-spectrum-container');
-        
         for (let i = 0; i < containers.length; i++) {
             const container = containers[i];
             if (container.spectrumInstance) {
                 spectrumInstance = container.spectrumInstance;
-                updateVisualizerStatus('waiting', 'Spectrum ready - connect MIDI device');
+                updateVisualizerStatus(
+                    "waiting",
+                    "Spectrum ready - connect MIDI device",
+                );
                 return true;
             }
         }
-        
+
         if (attempt < 5) {
-            updateVisualizerStatus('waiting', `Loading visualizer... (${attempt}/5)`);
+            updateVisualizerStatus(
+                "waiting",
+                `Loading visualizer... (${attempt}/5)`,
+            );
             setTimeout(() => findSpectrumInstance(attempt + 1), 1000);
         } else {
-            updateVisualizerStatus('error', 'Visualizer failed to load - try refresh');
+            updateVisualizerStatus(
+                "error",
+                "Visualizer failed to load - try refresh",
+            );
         }
-        
+
         return false;
     }
 
     async function connectDevice() {
-        const deviceSelect = document.getElementById('deviceSelect');
+        const deviceSelect = document.getElementById("deviceSelect");
         if (!deviceSelect) return;
-        
+
         const deviceId = deviceSelect.value;
-        
-        if (!deviceId || deviceId.includes('No MIDI') || deviceId.includes('Error') || deviceId.includes('Web MIDI')) {
-            updateStatus('midiStatus', 'Please select a valid MIDI device', 'error');
-            updateMidiBarStatus('error', 'Invalid device');
+
+        if (
+            !deviceId ||
+            deviceId.includes("No MIDI") ||
+            deviceId.includes("Error") ||
+            deviceId.includes("Web MIDI")
+        ) {
+            updateStatus(
+                "midiStatus",
+                "Please select a valid MIDI device",
+                "error",
+            );
+            updateMidiBarStatus("error", "Invalid device");
             return;
         }
-        
+
         if (!midiAccess || !midiAccess.inputs) {
             setTimeout(() => connectDevice(), 200);
             return;
         }
-        
+
         try {
             await pianoSynth.init();
-            
-            const input = Array.from(midiAccess.inputs.values()).find(inp => inp.id === deviceId);
-            
+
+            const input = Array.from(midiAccess.inputs.values()).find(
+                (inp) => inp.id === deviceId,
+            );
+
             if (!input) {
-                updateStatus('midiStatus', 'Selected MIDI device not found', 'error');
-                updateMidiBarStatus('error', 'Device not found');
+                updateStatus(
+                    "midiStatus",
+                    "Selected MIDI device not found",
+                    "error",
+                );
+                updateMidiBarStatus("error", "Device not found");
                 return;
             }
-            
+
             input.onmidimessage = handleMIDIMessage;
             midiInput = input;
-            
-            updateStatus('midiStatus', '🎹 Piano connected! Studio-quality audio enabled', 'ready');
-            updateMidiBarStatus('connected', 'Connected'); // NEW LINE FOR STICKY BAR
-            
-            const pianoControls = document.getElementById('pianoControls');
+
+            updateStatus(
+                "midiStatus",
+                "🎹 Piano connected! Studio-quality audio enabled",
+                "ready",
+            );
+            updateMidiBarStatus("connected", "Connected"); // NEW LINE FOR STICKY BAR
+
+            const pianoControls = document.getElementById("pianoControls");
             if (pianoControls) {
-                pianoControls.style.display = 'block';
+                pianoControls.style.display = "block";
             }
-            
-            console.log('🎹 Connected to MIDI device:', input.name);
+
+            console.log("🎹 Connected to MIDI device:", input.name);
 
             // Connect to visualizer
-            updateVisualizerStatus('waiting', 'Connecting to visualizer...');
-            
+            updateVisualizerStatus("waiting", "Connecting to visualizer...");
+
             setTimeout(() => {
                 if (!connectMidiToSpectrum()) {
                     setTimeout(() => {
                         if (!connectMidiToSpectrum()) {
                             setTimeout(() => {
                                 if (!connectMidiToSpectrum()) {
-                                    updateVisualizerStatus('error', 'Visualizer connection failed - MIDI audio still works');
+                                    updateVisualizerStatus(
+                                        "error",
+                                        "Visualizer connection failed - MIDI audio still works",
+                                    );
                                 }
                             }, 2000);
                         }
                     }, 1000);
                 }
             }, 500);
-            
         } catch (error) {
-            console.error('Error connecting to MIDI device:', error);
-            updateStatus('midiStatus', 'Failed to connect to MIDI device', 'error');
-            updateMidiBarStatus('error', 'Connection failed'); // NEW LINE FOR STICKY BAR
+            console.error("Error connecting to MIDI device:", error);
+            updateStatus(
+                "midiStatus",
+                "Failed to connect to MIDI device",
+                "error",
+            );
+            updateMidiBarStatus("error", "Connection failed"); // NEW LINE FOR STICKY BAR
         }
     }
 
-
     // MIDI Recording Buffer - FRONTEND ONLY (No WebSockets!)
+
+    // Fixed MidiRecorder class with proper state management
     class MidiRecorder {
         constructor() {
             this.isRecording = false;
@@ -972,187 +1104,217 @@ import CircularWaveform from '../components/circular_waveform.astro';
             this.startTime = null;
             this.recordingDuration = 0;
             this.silenceTimeout = null;
-            this.mode = 'time';
+            this.mode = "time";
             this.wasCanceled = false;
-
+            this.internalTimeout = null; // Track internal timeout
         }
-        
-        startRecording(mode = 'time', duration = 10) {
+
+        startRecording(mode = "time", duration = 10) {
+            // CRITICAL: Clear all previous state first
+            this.clearAllState();
+
             this.isRecording = true;
             this.recordedNotes = [];
             this.startTime = performance.now();
             this.mode = mode;
             this.recordingDuration = duration * 1000;
             this.wasCanceled = false;
-            
+
             console.log(`🎹 MIDI Recording started (${mode} mode)`);
-            
-            if (mode === 'time') {
+
+            if (mode === "time") {
                 // Stop after fixed duration
-                setTimeout(() => {
+                this.internalTimeout = setTimeout(() => {
                     if (this.isRecording) {
+                        console.log("⏰ Internal timeout stopping recording");
                         this.stopRecording();
                     }
                 }, this.recordingDuration);
-            } else if (mode === 'silence') {
-                // Monitor for silence
+            } else if (mode === "silence") {
                 this.resetSilenceTimer();
             }
         }
-        
+
         stopRecording() {
             if (!this.isRecording) return;
-            
+
             this.isRecording = false;
-            
-            if (this.silenceTimeout) {
-                clearTimeout(this.silenceTimeout);
-                this.silenceTimeout = null;
-            }
-            
+
+            // Clear all timers
+            this.clearAllTimers();
+
             const totalDuration = (performance.now() - this.startTime) / 1000;
-            console.log(`🎹 MIDI Recording stopped - Duration: ${totalDuration.toFixed(1)}s, Notes: ${this.recordedNotes.length}`);
-            
+            console.log(
+                `🎹 MIDI Recording stopped - Duration: ${totalDuration.toFixed(1)}s, Notes: ${this.recordedNotes.length}`,
+            );
+
             return this.recordedNotes;
         }
 
         cancelRecording() {
             if (!this.isRecording) {
-                console.log('🛑 No recording to cancel');
+                console.log("🛑 No recording to cancel");
                 return;
             }
-            
+
+            const totalDuration = (performance.now() - this.startTime) / 1000;
+            const noteCount = this.recordedNotes.length;
+
+            // Set cancellation flag BEFORE clearing state
+            this.wasCanceled = true;
             this.isRecording = false;
-            this.wasCanceled = true; // Set flag to indicate cancellation
-            
+
+            // Clear all timers and state
+            this.clearAllTimers();
+            this.clearAllState();
+
+            console.log(
+                `🛑 MIDI Recording canceled - Duration: ${totalDuration.toFixed(1)}s, Notes discarded: ${noteCount}`,
+            );
+
+            return true;
+        }
+
+        clearAllTimers() {
             if (this.silenceTimeout) {
                 clearTimeout(this.silenceTimeout);
                 this.silenceTimeout = null;
             }
-            
-            const totalDuration = (performance.now() - this.startTime) / 1000;
-            const noteCount = this.recordedNotes.length;
-            
-            // Clear all recorded data
+
+            if (this.internalTimeout) {
+                clearTimeout(this.internalTimeout);
+                this.internalTimeout = null;
+            }
+        }
+
+        clearAllState() {
             this.recordedNotes = [];
             this.startTime = null;
             this.recordingDuration = 0;
-            
-            console.log(`🛑 MIDI Recording canceled - Duration: ${totalDuration.toFixed(1)}s, Notes discarded: ${noteCount}`);
-            
-            return true;
+            this.clearAllTimers();
         }
-        
+
         addNote(note, velocity, timestamp, isNoteOn) {
             if (!this.isRecording) return;
-            
-            const relativeTime = (timestamp - this.startTime) / 1000; // Convert to seconds
-            
+
+            const relativeTime = (timestamp - this.startTime) / 1000;
+
             this.recordedNotes.push({
                 note: note,
                 velocity: velocity,
                 time: relativeTime,
-                isNoteOn: isNoteOn
+                isNoteOn: isNoteOn,
             });
-            
-            // Reset silence timer for silence mode
-            if (this.mode === 'silence' && isNoteOn) {
+
+            if (this.mode === "silence" && isNoteOn) {
                 this.resetSilenceTimer();
             }
         }
-        
+
         resetSilenceTimer() {
             if (this.silenceTimeout) {
                 clearTimeout(this.silenceTimeout);
             }
-            
-            // Stop recording after 2 seconds of silence
+
             this.silenceTimeout = setTimeout(() => {
                 if (this.isRecording) {
                     this.stopRecording();
                 }
             }, 2000);
         }
-        
+
         convertToMidiBlob() {
             if (this.recordedNotes.length === 0) {
-                throw new Error('No notes recorded');
+                throw new Error("No notes recorded");
             }
-            
+
             // Simple MIDI file creation
-            // This creates a basic MIDI file with the recorded notes
             const midiData = this.createMidiData(this.recordedNotes);
-            return new Blob([midiData], { type: 'audio/midi' });
+            return new Blob([midiData], { type: "audio/midi" });
         }
-        
+
         createMidiData(notes) {
             // Very simplified MIDI file creation
-            // In a production app, you'd use a proper MIDI library
-            // For now, we'll create a minimal MIDI file structure
-            
             const header = new Uint8Array([
-                0x4D, 0x54, 0x68, 0x64, // "MThd"
-                0x00, 0x00, 0x00, 0x06, // Header length
-                0x00, 0x00, // Format 0
-                0x00, 0x01, // 1 track
-                0x00, 0x60  // 96 ticks per quarter note
+                0x4d,
+                0x54,
+                0x68,
+                0x64, // "MThd"
+                0x00,
+                0x00,
+                0x00,
+                0x06, // Header length
+                0x00,
+                0x00, // Format 0
+                0x00,
+                0x01, // 1 track
+                0x00,
+                0x60, // 96 ticks per quarter note
             ]);
-            
+
             const trackData = this.createTrackData(notes);
             const trackHeader = new Uint8Array([
-                0x4D, 0x54, 0x72, 0x6B, // "MTrk"
-                ...this.int32ToBytes(trackData.length)
+                0x4d,
+                0x54,
+                0x72,
+                0x6b, // "MTrk"
+                ...this.int32ToBytes(trackData.length),
             ]);
-            
+
             // Combine header + track header + track data
-            const midiFile = new Uint8Array(header.length + trackHeader.length + trackData.length);
+            const midiFile = new Uint8Array(
+                header.length + trackHeader.length + trackData.length,
+            );
             midiFile.set(header, 0);
             midiFile.set(trackHeader, header.length);
             midiFile.set(trackData, header.length + trackHeader.length);
-            
+
             return midiFile;
         }
-        
+
         createTrackData(notes) {
             const events = [];
             let currentTime = 0;
-            
+
             // Sort notes by time
             const sortedNotes = [...notes].sort((a, b) => a.time - b.time);
-            
+
             for (const note of sortedNotes) {
-                const deltaTime = Math.max(0, Math.round((note.time - currentTime) * 96)); // Convert to ticks
+                const deltaTime = Math.max(
+                    0,
+                    Math.round((note.time - currentTime) * 96),
+                ); // Convert to ticks
                 currentTime = note.time;
-                
+
                 // Add MIDI event
                 const status = note.isNoteOn ? 0x90 : 0x80; // Note on/off on channel 1
                 events.push(...this.variableLengthQuantity(deltaTime));
                 events.push(status, note.note, note.velocity);
             }
-            
+
             // End of track
-            events.push(0x00, 0xFF, 0x2F, 0x00);
-            
+            events.push(0x00, 0xff, 0x2f, 0x00);
+
             return new Uint8Array(events);
         }
-        
+
         variableLengthQuantity(value) {
             const bytes = [];
-            bytes.unshift(value & 0x7F);
+            bytes.unshift(value & 0x7f);
             value >>= 7;
             while (value > 0) {
-                bytes.unshift((value & 0x7F) | 0x80);
+                bytes.unshift((value & 0x7f) | 0x80);
                 value >>= 7;
             }
             return bytes;
         }
-        
+
         int32ToBytes(value) {
             return [
-                (value >> 24) & 0xFF,
-                (value >> 16) & 0xFF,
-                (value >> 8) & 0xFF,
-                value & 0xFF
+                (value >> 24) & 0xff,
+                (value >> 16) & 0xff,
+                (value >> 8) & 0xff,
+                value & 0xff,
             ];
         }
     }
@@ -1172,42 +1334,43 @@ import CircularWaveform from '../components/circular_waveform.astro';
             this.lookahead = 25.0;
             this.scheduleAheadTime = 0.1;
         }
-        
+
         async initAudio() {
             if (!this.audioContext) {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                
-                if (this.audioContext.state === 'suspended') {
+                this.audioContext = new (window.AudioContext ||
+                    window.webkitAudioContext)();
+
+                if (this.audioContext.state === "suspended") {
                     await this.audioContext.resume();
                 }
             }
         }
-        
+
         playClick(time, isCountIn) {
             const osc = this.audioContext.createOscillator();
             const envelope = this.audioContext.createGain();
-            
+
             osc.connect(envelope);
             envelope.connect(this.audioContext.destination);
-            
+
             osc.frequency.value = isCountIn ? 800 : 400;
-            
+
             envelope.gain.setValueAtTime(0, time);
             envelope.gain.linearRampToValueAtTime(0.3, time + 0.001);
             envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
-            
+
             osc.start(time);
             osc.stop(time + 0.1);
         }
-        
+
         nextNote() {
             const secondsPerBeat = 60.0 / this.bpm;
             this.nextNoteTime += secondsPerBeat;
-            
+
             if (this.isCountingIn) {
                 this.countInBeat++;
                 this.updateVisualIndicator(this.countInBeat, true);
-                
+
                 if (this.countInBeat >= 4) {
                     this.isCountingIn = false;
                     this.beatCount = 0;
@@ -1219,103 +1382,111 @@ import CircularWaveform from '../components/circular_waveform.astro';
                 this.updateVisualIndicator(this.beatCount, false);
             }
         }
-        
+
         scheduleNote() {
-            while (this.nextNoteTime < this.audioContext.currentTime + this.scheduleAheadTime) {
+            while (
+                this.nextNoteTime <
+                this.audioContext.currentTime + this.scheduleAheadTime
+            ) {
                 this.playClick(this.nextNoteTime, this.isCountingIn);
                 this.nextNote();
             }
         }
-        
+
         scheduler() {
             this.scheduleNote();
-            
+
             if (this.isPlaying) {
-                this.intervalId = setTimeout(() => this.scheduler(), this.lookahead);
+                this.intervalId = setTimeout(
+                    () => this.scheduler(),
+                    this.lookahead,
+                );
             }
         }
-        
+
         async start(bpm, countIn = true) {
             try {
                 await this.initAudio();
-                
+
                 this.bpm = bpm;
                 this.beatCount = 0;
                 this.countInBeat = 0;
                 this.isCountingIn = countIn;
                 this.recordingStarted = false;
                 this.isPlaying = true;
-                
+
                 this.nextNoteTime = this.audioContext.currentTime;
                 this.scheduler();
-                
             } catch (error) {
-                console.error('Error initializing metronome:', error);
+                console.error("Error initializing metronome:", error);
                 throw error;
             }
         }
-        
+
         updateVisualIndicator(beat, isCountIn) {
-            const beatCircle = document.getElementById('beatCircle');
-            const beatCount = document.getElementById('beatCount');
-            
+            const beatCircle = document.getElementById("beatCircle");
+            const beatCount = document.getElementById("beatCount");
+
             if (!beatCircle || !beatCount) return;
-            
-            beatCircle.classList.remove('active', 'count-in');
-            beatCount.classList.remove('count-in', 'recording');
-            
+
+            beatCircle.classList.remove("active", "count-in");
+            beatCount.classList.remove("count-in", "recording");
+
             if (isCountIn) {
-                beatCircle.classList.add('count-in');
-                beatCount.classList.add('count-in');
+                beatCircle.classList.add("count-in");
+                beatCount.classList.add("count-in");
                 beatCount.textContent = beat.toString();
             } else {
-                beatCircle.classList.add('active');
-                beatCount.classList.add('recording');
+                beatCircle.classList.add("active");
+                beatCount.classList.add("recording");
                 beatCount.textContent = `Beat ${beat}`;
             }
-            
+
             setTimeout(() => {
-                beatCircle.classList.remove('active', 'count-in');
+                beatCircle.classList.remove("active", "count-in");
             }, 150);
         }
-        
+
         stop() {
             if (this.isPlaying) {
                 this.isPlaying = false;
                 this.isCountingIn = false;
                 this.recordingStarted = false;
-                
+
                 if (this.intervalId) {
                     clearTimeout(this.intervalId);
                     this.intervalId = null;
                 }
-                
-                const beatCircle = document.getElementById('beatCircle');
-                const beatCount = document.getElementById('beatCount');
-                
+
+                // Reset beat indicator whenever metronome stops
+                const beatCircle = document.getElementById("beatCircle");
+                const beatCount = document.getElementById("beatCount");
+
                 if (beatCircle && beatCount) {
-                    beatCircle.classList.remove('active', 'count-in');
-                    beatCount.classList.remove('count-in', 'recording');
-                    beatCount.textContent = 'Ready';
+                    beatCircle.classList.remove("active", "count-in");
+                    beatCount.classList.remove("count-in", "recording");
+                    beatCount.textContent = "";
                 }
-                
-                console.log('🥁 Metronome stopped');
+
+                console.log("🥁 Metronome stopped");
             }
         }
-        
+
         startMIDIRecording() {
-            console.log('🎵 Starting MIDI recording after count-in...');
-            
+            console.log("🎵 Starting MIDI recording after count-in...");
+
             // Calculate much longer buffer time to ensure we capture everything
             const currentTempo = 100; // Fixed tempo
             const beatsPerSecond = currentTempo / 60;
             const durationFor16Beats = 16 / beatsPerSecond;
-            
+
             // Add 3 second buffer to absolutely ensure we don't cut off
             const bufferedDuration = durationFor16Beats + 3.0;
-            
-            console.log(`Recording: ${bufferedDuration.toFixed(1)}s (${durationFor16Beats.toFixed(1)}s + 3s buffer) for 16 beats at ${currentTempo} BPM`);
-            
+
+            console.log(
+                `Recording: ${bufferedDuration.toFixed(1)}s (${durationFor16Beats.toFixed(1)}s + 3s buffer) for 16 beats at ${currentTempo} BPM`,
+            );
+
             // Wait a tiny bit to ensure metronome timing is perfect
             setTimeout(() => {
                 startDirectCapture(bufferedDuration);
@@ -1334,45 +1505,50 @@ import CircularWaveform from '../components/circular_waveform.astro';
             this.activeNotes = new Map();
             this.volume = 0.7;
             this.reverbAmount = 0.15; // 15% reverb by default
-            this.soundType = 'piano';
+            this.soundType = "piano";
         }
-        
+
         async init() {
             if (!this.audioContext) {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                
+                this.audioContext = new (window.AudioContext ||
+                    window.webkitAudioContext)();
+
                 // Create gain nodes for dry/wet mixing
                 this.masterGain = this.audioContext.createGain();
                 this.dryGain = this.audioContext.createGain();
                 this.wetGain = this.audioContext.createGain();
-                
+
                 // Set initial volumes
                 this.masterGain.gain.value = this.volume;
                 this.updateReverbMix();
-                
+
                 // Create subtle reverb
                 await this.createReverb();
-                
+
                 // Connect: dry signal bypasses reverb, wet signal goes through reverb
                 this.dryGain.connect(this.masterGain);
                 this.wetGain.connect(this.reverbNode);
                 this.reverbNode.connect(this.masterGain);
                 this.masterGain.connect(this.audioContext.destination);
-                
-                if (this.audioContext.state === 'suspended') {
+
+                if (this.audioContext.state === "suspended") {
                     await this.audioContext.resume();
                 }
             }
         }
-        
+
         async createReverb() {
             // Create convolution reverb - MUCH more subtle
             this.reverbNode = this.audioContext.createConvolver();
-            
+
             // Create shorter, more subtle impulse response
             const length = this.audioContext.sampleRate * 0.5; // Only 0.5 seconds
-            const impulse = this.audioContext.createBuffer(2, length, this.audioContext.sampleRate);
-            
+            const impulse = this.audioContext.createBuffer(
+                2,
+                length,
+                this.audioContext.sampleRate,
+            );
+
             for (let channel = 0; channel < 2; channel++) {
                 const channelData = impulse.getChannelData(channel);
                 for (let i = 0; i < length; i++) {
@@ -1380,10 +1556,10 @@ import CircularWaveform from '../components/circular_waveform.astro';
                     channelData[i] = (Math.random() * 2 - 1) * decay * 0.03; // Much quieter
                 }
             }
-            
+
             this.reverbNode.buffer = impulse;
         }
-        
+
         updateReverbMix() {
             if (this.dryGain && this.wetGain) {
                 // Mix between dry and wet signal
@@ -1391,226 +1567,255 @@ import CircularWaveform from '../components/circular_waveform.astro';
                 this.wetGain.gain.value = this.reverbAmount;
             }
         }
-        
+
         midiNoteToFrequency(midiNote) {
             return 440 * Math.pow(2, (midiNote - 69) / 12);
         }
-        
+
         createEnhancedPianoSound(frequency, startTime, duration = 3.0) {
             // Create multiple oscillators for rich harmonics
             const fundamental = this.audioContext.createOscillator();
             const harmonic2 = this.audioContext.createOscillator();
             const harmonic3 = this.audioContext.createOscillator();
             const subharmonic = this.audioContext.createOscillator();
-            
+
             // Create filters for each oscillator
             const filter1 = this.audioContext.createBiquadFilter();
             const filter2 = this.audioContext.createBiquadFilter();
             const filter3 = this.audioContext.createBiquadFilter();
             const subFilter = this.audioContext.createBiquadFilter();
-            
+
             // Create gain nodes for mixing
             const fundamentalGain = this.audioContext.createGain();
             const harmonic2Gain = this.audioContext.createGain();
             const harmonic3Gain = this.audioContext.createGain();
             const subGain = this.audioContext.createGain();
             const masterEnvelope = this.audioContext.createGain();
-            
+
             // Configure oscillators based on sound type
             switch (this.soundType) {
-                case 'piano':
-                    fundamental.type = 'triangle';
-                    harmonic2.type = 'sine';
-                    harmonic3.type = 'sawtooth';
-                    subharmonic.type = 'sine';
-                    
+                case "piano":
+                    fundamental.type = "triangle";
+                    harmonic2.type = "sine";
+                    harmonic3.type = "sawtooth";
+                    subharmonic.type = "sine";
+
                     fundamental.frequency.value = frequency;
                     harmonic2.frequency.value = frequency * 2;
                     harmonic3.frequency.value = frequency * 3;
                     subharmonic.frequency.value = frequency * 0.5;
-                    
-                    filter1.type = 'lowpass';
+
+                    filter1.type = "lowpass";
                     filter1.frequency.value = 2500;
                     filter1.Q.value = 1;
-                    
-                    filter2.type = 'bandpass';
+
+                    filter2.type = "bandpass";
                     filter2.frequency.value = 1500;
                     filter2.Q.value = 2;
-                    
-                    filter3.type = 'highpass';
+
+                    filter3.type = "highpass";
                     filter3.frequency.value = 500;
                     filter3.Q.value = 1;
-                    
-                    subFilter.type = 'lowpass';
+
+                    subFilter.type = "lowpass";
                     subFilter.frequency.value = 200;
                     subFilter.Q.value = 1;
-                    
+
                     fundamentalGain.gain.value = 0.6;
                     harmonic2Gain.gain.value = 0.3;
                     harmonic3Gain.gain.value = 0.15;
                     subGain.gain.value = 0.4;
                     break;
-                    
-                case 'electric':
-                    fundamental.type = 'sawtooth';
-                    harmonic2.type = 'triangle';
-                    harmonic3.type = 'square';
-                    subharmonic.type = 'sine';
-                    
+
+                case "electric":
+                    fundamental.type = "sawtooth";
+                    harmonic2.type = "triangle";
+                    harmonic3.type = "square";
+                    subharmonic.type = "sine";
+
                     fundamental.frequency.value = frequency;
                     harmonic2.frequency.value = frequency * 2;
                     harmonic3.frequency.value = frequency * 4;
                     subharmonic.frequency.value = frequency * 0.5;
-                    
-                    filter1.type = 'lowpass';
+
+                    filter1.type = "lowpass";
                     filter1.frequency.value = 1800;
                     filter1.Q.value = 3;
-                    
+
                     fundamentalGain.gain.value = 0.7;
                     harmonic2Gain.gain.value = 0.4;
                     harmonic3Gain.gain.value = 0.2;
                     subGain.gain.value = 0.3;
                     break;
-                    
-                case 'organ':
-                    fundamental.type = 'sawtooth';
-                    harmonic2.type = 'square';
-                    harmonic3.type = 'triangle';
-                    subharmonic.type = 'square';
-                    
+
+                case "organ":
+                    fundamental.type = "sawtooth";
+                    harmonic2.type = "square";
+                    harmonic3.type = "triangle";
+                    subharmonic.type = "square";
+
                     fundamental.frequency.value = frequency;
                     harmonic2.frequency.value = frequency * 2;
                     harmonic3.frequency.value = frequency * 3;
                     subharmonic.frequency.value = frequency;
-                    
-                    filter1.type = 'lowpass';
+
+                    filter1.type = "lowpass";
                     filter1.frequency.value = 3500;
                     filter1.Q.value = 0.5;
-                    
+
                     fundamentalGain.gain.value = 0.5;
                     harmonic2Gain.gain.value = 0.4;
                     harmonic3Gain.gain.value = 0.3;
                     subGain.gain.value = 0.6;
                     break;
-                    
-                case 'synth':
-                    fundamental.type = 'square';
-                    harmonic2.type = 'sawtooth';
-                    harmonic3.type = 'triangle';
-                    subharmonic.type = 'square';
-                    
+
+                case "synth":
+                    fundamental.type = "square";
+                    harmonic2.type = "sawtooth";
+                    harmonic3.type = "triangle";
+                    subharmonic.type = "square";
+
                     fundamental.frequency.value = frequency;
                     harmonic2.frequency.value = frequency * 1.5;
                     harmonic3.frequency.value = frequency * 0.75;
                     subharmonic.frequency.value = frequency * 0.5;
-                    
-                    filter1.type = 'bandpass';
+
+                    filter1.type = "bandpass";
                     filter1.frequency.value = 1200;
                     filter1.Q.value = 8;
-                    
+
                     fundamentalGain.gain.value = 0.8;
                     harmonic2Gain.gain.value = 0.6;
                     harmonic3Gain.gain.value = 0.4;
                     subGain.gain.value = 0.5;
                     break;
             }
-            
+
             // Connect the audio graph
             fundamental.connect(filter1);
             filter1.connect(fundamentalGain);
-            
+
             harmonic2.connect(filter2);
             filter2.connect(harmonic2Gain);
-            
+
             harmonic3.connect(filter3);
             filter3.connect(harmonic3Gain);
-            
+
             subharmonic.connect(subFilter);
             subFilter.connect(subGain);
-            
+
             // Connect to both dry and wet paths
             fundamentalGain.connect(masterEnvelope);
             harmonic2Gain.connect(masterEnvelope);
             harmonic3Gain.connect(masterEnvelope);
             subGain.connect(masterEnvelope);
-            
+
             // Split signal to dry and wet paths
-            masterEnvelope.connect(this.dryGain);  // Dry signal (no reverb)
-            masterEnvelope.connect(this.wetGain);  // Wet signal (with reverb)
-            
+            masterEnvelope.connect(this.dryGain); // Dry signal (no reverb)
+            masterEnvelope.connect(this.wetGain); // Wet signal (with reverb)
+
             // Create realistic ADSR envelope
             const attackTime = 0.005;
             const decayTime = 0.3;
             const sustainLevel = 0.4;
             const releaseTime = 1.2;
-            
+
             masterEnvelope.gain.setValueAtTime(0, startTime);
-            masterEnvelope.gain.linearRampToValueAtTime(0.9, startTime + attackTime);
-            masterEnvelope.gain.exponentialRampToValueAtTime(sustainLevel, startTime + attackTime + decayTime);
-            masterEnvelope.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-            
+            masterEnvelope.gain.linearRampToValueAtTime(
+                0.9,
+                startTime + attackTime,
+            );
+            masterEnvelope.gain.exponentialRampToValueAtTime(
+                sustainLevel,
+                startTime + attackTime + decayTime,
+            );
+            masterEnvelope.gain.exponentialRampToValueAtTime(
+                0.001,
+                startTime + duration,
+            );
+
             // Start all oscillators
             fundamental.start(startTime);
             harmonic2.start(startTime);
             harmonic3.start(startTime);
             subharmonic.start(startTime);
-            
+
             // Stop all oscillators
             fundamental.stop(startTime + duration);
             harmonic2.stop(startTime + duration);
             harmonic3.stop(startTime + duration);
             subharmonic.stop(startTime + duration);
-            
-            return { 
-                fundamental, harmonic2, harmonic3, subharmonic,
-                masterEnvelope, filters: [filter1, filter2, filter3, subFilter]
+
+            return {
+                fundamental,
+                harmonic2,
+                harmonic3,
+                subharmonic,
+                masterEnvelope,
+                filters: [filter1, filter2, filter3, subFilter],
             };
         }
-        
+
         playNote(midiNote, velocity = 100) {
             if (!this.audioContext) return;
-            
+
             const frequency = this.midiNoteToFrequency(midiNote);
             const startTime = this.audioContext.currentTime;
-            const normalizedVelocity = Math.max(0.1, Math.min(1.0, velocity / 127));
-            
-            const sound = this.createEnhancedPianoSound(frequency, startTime, 4.0);
+            const normalizedVelocity = Math.max(
+                0.1,
+                Math.min(1.0, velocity / 127),
+            );
+
+            const sound = this.createEnhancedPianoSound(
+                frequency,
+                startTime,
+                4.0,
+            );
             sound.masterEnvelope.gain.value *= normalizedVelocity;
-            
+
             this.activeNotes.set(midiNote, sound);
-            
-            console.log(`🎹 Playing note ${midiNote} (${frequency.toFixed(1)}Hz) at velocity ${velocity}`);
+
+            console.log(
+                `🎹 Playing note ${midiNote} (${frequency.toFixed(1)}Hz) at velocity ${velocity}`,
+            );
         }
-        
+
         stopNote(midiNote) {
             if (this.activeNotes.has(midiNote)) {
                 const sound = this.activeNotes.get(midiNote);
                 const releaseTime = this.audioContext.currentTime;
-                
+
                 // Natural release envelope
-                sound.masterEnvelope.gain.exponentialRampToValueAtTime(0.001, releaseTime + 0.8);
-                
+                sound.masterEnvelope.gain.exponentialRampToValueAtTime(
+                    0.001,
+                    releaseTime + 0.8,
+                );
+
                 this.activeNotes.delete(midiNote);
                 console.log(`🎹 Stopping note ${midiNote}`);
             }
         }
-        
+
         setVolume(volume) {
             this.volume = Math.max(0, Math.min(1, volume / 100));
             if (this.masterGain) {
-                this.masterGain.gain.setTargetAtTime(this.volume, this.audioContext.currentTime, 0.1);
+                this.masterGain.gain.setTargetAtTime(
+                    this.volume,
+                    this.audioContext.currentTime,
+                    0.1,
+                );
             }
         }
-        
+
         setReverbAmount(amount) {
             this.reverbAmount = Math.max(0, Math.min(1, amount / 100));
             this.updateReverbMix();
         }
-        
+
         setSoundType(soundType) {
             this.soundType = soundType;
         }
-        
+
         testSound() {
             // Play a nice chord progression
             this.playNote(60, 80); // C4
@@ -1619,7 +1824,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
             setTimeout(() => this.playNote(72, 60), 450); // C5
         }
     }
-    
+
     // Initialize objects
     metronome = new Metronome();
     pianoSynth = new PianoSynth();
@@ -1627,18 +1832,23 @@ import CircularWaveform from '../components/circular_waveform.astro';
 
     // MIDI Player Functions
     function initializeMidiPlayer() {
-        midiPlayer = document.getElementById('arrangementPlayer');
+        midiPlayer = document.getElementById("arrangementPlayer");
         if (midiPlayer) {
-            console.log('🎵 MIDI Player initialized');
+            console.log("🎵 MIDI Player initialized");
             // Set playbackRate to match desired BPM (100) from default (120)
             midiPlayer.playbackRate = baseBPM / defaultBPM;
-            updateMidiDebugInfo(`Playback rate: ${midiPlayer.playbackRate.toFixed(3)} for BPM ${baseBPM}`);
-            updateMidiDebugInfo(`16-beat loop duration: ${getMidiLoopEnd().toFixed(2)}s`);
+            updateMidiDebugInfo(
+                `Playback rate: ${midiPlayer.playbackRate.toFixed(3)} for BPM ${baseBPM}`,
+            );
+            updateMidiDebugInfo(
+                `16-beat loop duration: ${getMidiLoopEnd().toFixed(2)}s`,
+            );
 
-            midiPlayer.addEventListener('start', () => {
-                updateMidiDebugInfo('Playback started');
+            midiPlayer.addEventListener("start", () => {
+                updateMidiDebugInfo("Playback started");
                 if (isMidiLooping) {
-                    if (midiCheckLoopInterval) clearInterval(midiCheckLoopInterval);
+                    if (midiCheckLoopInterval)
+                        clearInterval(midiCheckLoopInterval);
                     midiCheckLoopInterval = setInterval(() => {
                         if (midiPlayer.currentTime !== undefined) {
                             const loopEnd = getMidiLoopEnd();
@@ -1649,26 +1859,32 @@ import CircularWaveform from '../components/circular_waveform.astro';
                                 setTimeout(() => {
                                     if (!midiPlayer.playing) {
                                         midiPlayer.start();
-                                        updateMidiDebugInfo('Player restarted after loop');
+                                        updateMidiDebugInfo(
+                                            "Player restarted after loop",
+                                        );
                                     }
                                 }, 10); // Small delay to ensure time is set
-                                updateMidiDebugInfo(`Loop: ${midiPlayer.currentTime.toFixed(2)}s -> ${loopStart.toFixed(2)}s`);
+                                updateMidiDebugInfo(
+                                    `Loop: ${midiPlayer.currentTime.toFixed(2)}s -> ${loopStart.toFixed(2)}s`,
+                                );
                             }
                         }
                     }, 5); // Check every 5ms for tighter control
                 }
             });
 
-            midiPlayer.addEventListener('stop', () => {
-                updateMidiDebugInfo(`Stopped at ${midiPlayer.currentTime?.toFixed(2) || 'unknown'}s, Looping: ${isMidiLooping}`);
+            midiPlayer.addEventListener("stop", () => {
+                updateMidiDebugInfo(
+                    `Stopped at ${midiPlayer.currentTime?.toFixed(2) || "unknown"}s, Looping: ${isMidiLooping}`,
+                );
                 if (midiCheckLoopInterval) {
                     clearInterval(midiCheckLoopInterval);
                     midiCheckLoopInterval = null;
                 }
             });
         } else {
-            console.error('❌ No MIDI player found');
-            updateMidiDebugInfo('ERROR: MIDI player not found');
+            console.error("❌ No MIDI player found");
+            updateMidiDebugInfo("ERROR: MIDI player not found");
         }
     }
 
@@ -1682,7 +1898,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
     }
 
     function updateMidiDebugInfo(message) {
-        const info = document.getElementById('midiPlayerInfo');
+        const info = document.getElementById("midiPlayerInfo");
         if (info) {
             const timestamp = new Date().toLocaleTimeString();
             info.innerHTML += `[${timestamp}] ${message}<br>`;
@@ -1704,15 +1920,16 @@ import CircularWaveform from '../components/circular_waveform.astro';
         if (midiPlayer) {
             midiPlayer.stop();
             midiPlayer.currentTime = 0;
-            updateMidiDebugInfo('Reset to start');
+            updateMidiDebugInfo("Reset to start");
         }
     }
 
     function toggleMidiLoop() {
         isMidiLooping = !isMidiLooping;
-        document.getElementById('midiLoopStatus').textContent = `Loop: ${isMidiLooping ? 'ON' : 'OFF'}`;
-        updateMidiDebugInfo(`Looping: ${isMidiLooping ? 'ON' : 'OFF'}`);
-        
+        document.getElementById("midiLoopStatus").textContent =
+            `Loop: ${isMidiLooping ? "ON" : "OFF"}`;
+        updateMidiDebugInfo(`Looping: ${isMidiLooping ? "ON" : "OFF"}`);
+
         // Clear interval when looping is turned off
         if (!isMidiLooping && midiCheckLoopInterval) {
             clearInterval(midiCheckLoopInterval);
@@ -1722,71 +1939,78 @@ import CircularWaveform from '../components/circular_waveform.astro';
 
     // Completely robust showMidiPlayer function that eliminates ALL path issues
     function showMidiPlayer(arrangementFilename) {
-        const midiPlayerSection = document.getElementById('midiPlayerSection');
-        const midiPlayer = document.getElementById('arrangementPlayer');
-        
+        const midiPlayerSection = document.getElementById("midiPlayerSection");
+        const midiPlayer = document.getElementById("arrangementPlayer");
+
         if (midiPlayerSection && midiPlayer) {
             // COMPLETELY strip everything and get just the filename
             let justFilename = arrangementFilename;
-            
-            console.log('🔧 DEBUG: Original input:', justFilename);
-            
+
+            console.log("🔧 DEBUG: Original input:", justFilename);
+
             // Remove any URL protocols
-            justFilename = justFilename.replace(/^https?:\/\/[^\/]+/, '');
-            
+            justFilename = justFilename.replace(/^https?:\/\/[^\/]+/, "");
+
             // Remove any leading slashes
-            justFilename = justFilename.replace(/^\/+/, '');
-            
+            justFilename = justFilename.replace(/^\/+/, "");
+
             // If it contains ANY path separators, just get the last part (filename only)
-            if (justFilename.includes('/')) {
-                justFilename = justFilename.split('/').pop();
+            if (justFilename.includes("/")) {
+                justFilename = justFilename.split("/").pop();
             }
-            
+
             // If it contains backslashes (Windows paths), get the last part
-            if (justFilename.includes('\\')) {
-                justFilename = justFilename.split('\\').pop();
+            if (justFilename.includes("\\")) {
+                justFilename = justFilename.split("\\").pop();
             }
-            
+
             // Remove any remaining path prefixes
-            justFilename = justFilename.replace(/.*generated_arrangements[\/\\]/, '');
-            
+            justFilename = justFilename.replace(
+                /.*generated_arrangements[\/\\]/,
+                "",
+            );
+
             // Final safety check - if it STILL has path separators, just get the last part
-            while (justFilename.includes('/') || justFilename.includes('\\')) {
+            while (justFilename.includes("/") || justFilename.includes("\\")) {
                 justFilename = justFilename.split(/[\/\\]/).pop();
             }
-            
+
             // Construct the clean path - ONLY use the filename
             const finalPath = `/generated_arrangements/${justFilename}`;
-            
-            console.log('🔧 DEBUG: Extracted filename:', justFilename);
-            console.log('🔧 DEBUG: Final path:', finalPath);
-            
+
+            console.log("🔧 DEBUG: Extracted filename:", justFilename);
+            console.log("🔧 DEBUG: Final path:", finalPath);
+
             // Set the source
             midiPlayer.src = finalPath;
-            
+
             // Show the player
-            midiPlayerSection.style.display = 'block';
-            
+            midiPlayerSection.style.display = "block";
+
             // Initialize player if not already done
             initializeMidiPlayer();
-            
+
             updateMidiDebugInfo(`Loaded: ${justFilename}`);
             updateMidiDebugInfo(`Path: ${finalPath}`);
-            console.log('🎵 MIDI Player loaded:', finalPath);
-            
+            console.log("🎵 MIDI Player loaded:", finalPath);
+
             // Test if the file actually exists by making a fetch request
-            fetch(finalPath, { method: 'HEAD' })
-                .then(response => {
+            fetch(finalPath, { method: "HEAD" })
+                .then((response) => {
                     if (response.ok) {
                         updateMidiDebugInfo(`✅ File confirmed accessible`);
                     } else {
-                        updateMidiDebugInfo(`❌ File not found (${response.status})`);
-                        console.error('File not accessible:', finalPath);
+                        updateMidiDebugInfo(
+                            `❌ File not found (${response.status})`,
+                        );
+                        console.error("File not accessible:", finalPath);
                     }
                 })
-                .catch(error => {
-                    updateMidiDebugInfo(`❌ File check failed: ${error.message}`);
-                    console.error('Error checking file:', error);
+                .catch((error) => {
+                    updateMidiDebugInfo(
+                        `❌ File check failed: ${error.message}`,
+                    );
+                    console.error("Error checking file:", error);
                 });
         }
     }
@@ -1795,283 +2019,425 @@ import CircularWaveform from '../components/circular_waveform.astro';
     async function loadDevices() {
         try {
             if (!navigator.requestMIDIAccess) {
-                updateMidiBarStatus('error', 'Not supported');
-                
-                const mainSelect = document.getElementById('deviceSelect');
+                updateMidiBarStatus("error", "Not supported");
+
+                const mainSelect = document.getElementById("deviceSelect");
                 if (mainSelect) {
-                    mainSelect.innerHTML = '<option>Web MIDI not supported</option>';
+                    mainSelect.innerHTML =
+                        "<option>Web MIDI not supported</option>";
                 }
                 return;
             }
-            
+
             midiAccess = await navigator.requestMIDIAccess();
             const inputs = Array.from(midiAccess.inputs.values());
-            
-            const mainSelect = document.getElementById('deviceSelect');
-            
+
+            const mainSelect = document.getElementById("deviceSelect");
+
             if (!mainSelect) return;
-            
-            mainSelect.innerHTML = '';
-            
+
+            mainSelect.innerHTML = "";
+
             if (inputs.length === 0) {
-                mainSelect.innerHTML = '<option value="">No MIDI devices found</option>';
-                updateMidiBarStatus('waiting', 'No devices');
+                mainSelect.innerHTML =
+                    '<option value="">No MIDI devices found</option>';
+                updateMidiBarStatus("waiting", "No devices");
             } else {
                 // Add default option
-                mainSelect.innerHTML = '<option value="">Select MIDI Device...</option>';
-                
+                mainSelect.innerHTML =
+                    '<option value="">Select MIDI Device...</option>';
+
                 // Add all devices
                 inputs.forEach((input, index) => {
-                    const option = document.createElement('option');
+                    const option = document.createElement("option");
                     option.value = input.id;
                     option.textContent = `${input.name}`;
                     mainSelect.appendChild(option);
                 });
-                
-                updateMidiBarStatus('waiting', 'Select device');
-                
+
+                updateMidiBarStatus("waiting", "Select device");
+
                 // SIMPLE AUTO-CONNECT: Back to what was working
                 if (inputs.length > 0) {
                     mainSelect.value = inputs[0].id;
-                    console.log('🎹 Auto-connecting to first MIDI device:', inputs[0].name);
-                    
+                    console.log(
+                        "🎹 Auto-connecting to first MIDI device:",
+                        inputs[0].name,
+                    );
+
                     // Single attempt with the original timing
                     setTimeout(() => {
                         connectDevice();
                     }, 1000);
                 }
             }
-            
-            console.log('🎹 Found MIDI inputs:', inputs.length);
+
+            console.log("🎹 Found MIDI inputs:", inputs.length);
         } catch (error) {
-            console.error('Error accessing MIDI:', error);
-            updateMidiBarStatus('error', 'Access failed');
-            
-            const mainSelect = document.getElementById('deviceSelect');
+            console.error("Error accessing MIDI:", error);
+            updateMidiBarStatus("error", "Access failed");
+
+            const mainSelect = document.getElementById("deviceSelect");
             if (mainSelect) {
-                mainSelect.innerHTML = '<option>Error loading devices</option>';
+                mainSelect.innerHTML = "<option>Error loading devices</option>";
             }
         }
     }
-    
+
     function handleMIDIMessage(message) {
         const [command, note, velocity] = message.data;
         const timestamp = performance.now();
-        
+
         // Note On (command 144-159, velocity > 0)
         if (command >= 144 && command <= 159 && velocity > 0) {
             // Play sound with perfect quality
             pianoSynth.playNote(note, velocity);
-            
+
             // Record note if recording
             if (midiRecorder.isRecording) {
                 midiRecorder.addNote(note, velocity, timestamp, true);
             }
         }
         // Note Off (command 128-143 or command 144-159 with velocity 0)
-        else if ((command >= 128 && command <= 143) || 
-                 (command >= 144 && command <= 159 && velocity === 0)) {
+        else if (
+            (command >= 128 && command <= 143) ||
+            (command >= 144 && command <= 159 && velocity === 0)
+        ) {
             // Stop sound naturally
             pianoSynth.stopNote(note);
-            
+
             // Record note off if recording
             if (midiRecorder.isRecording) {
                 midiRecorder.addNote(note, 0, timestamp, false);
             }
         }
     }
-    
-    // Recording Functions
-    async function startCapture() {
+
+    // Fixed recording control functions
+    function toggleRecording() {
+        console.log(
+            "🔄 Toggle recording called, current state:",
+            midiRecorder?.isRecording,
+        );
+
+        if (midiRecorder && midiRecorder.isRecording) {
+            // Currently recording - cancel it
+            console.log("🛑 Canceling current recording");
+            cancelRecording();
+        } else {
+            // Not recording - start it
+            console.log("▶️ Starting new recording");
+            startCapture();
+        }
+    }
+
+    function startCapture() {
         if (!midiInput) {
-            updateStatus('captureStatus', 'Please connect a MIDI device first', 'error');
+            updateStatus(
+                "captureStatus",
+                "Please connect a MIDI device first",
+                "error",
+            );
             return;
         }
-        // Use default values since we removed the UI controls
-        const enableMetronome = true; // Always enable metronome
-        const tempo = 100; // Fixed tempo at 100 BPM
-        
+
+        // Clear any cached analysis results FIRST
+        clearPreviousAnalysis();
+
+        const enableMetronome = true;
+        const tempo = 100;
+
+        // Update button to "stop" state IMMEDIATELY
+        updateRecordingButton(true);
+
         if (enableMetronome) {
-            updateStatus('captureStatus', '🥁 Count-in starting... Get ready!', 'analyzing');
-            
+            updateStatus("captureStatus", "🥁 Counting in...", "analyzing");
+
             try {
-                await metronome.start(tempo, true);
+                metronome.start(tempo, true);
             } catch (error) {
-                console.error('Error starting metronome:', error);
-                updateStatus('captureStatus', 'Metronome error - starting recording without metronome', 'error');
+                console.error("Error starting metronome:", error);
+                updateStatus(
+                    "captureStatus",
+                    "Metronome error - starting recording without metronome",
+                    "error",
+                );
                 startDirectCapture();
             }
         } else {
             startDirectCapture();
         }
     }
-    
+
     function startDirectCapture(predefinedDuration = null) {
-        const mode = 'time';
-        
+        console.log(
+            "🎬 Starting direct capture, predefined duration:",
+            predefinedDuration,
+        );
+
+        const mode = "time";
+
+        // **CRITICAL FIX: Use the buffered duration for both internal and external timeouts**
+        const exactDurationFor16Bars = 10.1; // 16 beats at 100 BPM = 9.6s + 0.5s buffer
+
         let duration;
         if (predefinedDuration) {
-            // Use predefined duration (from metronome)
-            duration = predefinedDuration;
+            // Use the buffered duration instead of the exact calculated one
+            duration = exactDurationFor16Bars;
         } else {
-            // Calculate duration for manual start - use fixed tempo
-            const currentTempo = 100; // Fixed tempo
-            const beatsPerSecond = currentTempo / 60;
-            const durationFor16Beats = 16 / beatsPerSecond;
-            duration = mode === 'time' ? durationFor16Beats + 1.0 : 30.0; // Add buffer for manual mode too
+            duration = exactDurationFor16Bars;
         }
-        
+
         console.log(`🎵 Recording for ${duration.toFixed(1)}s (mode: ${mode})`);
-        
-        // Start frontend MIDI recording
+
+        // Start MIDI recording with the BUFFERED duration
         midiRecorder.startRecording(mode, duration);
-        
-        updateStatus('captureStatus', '🎵 Recording... Play your melody!', 'recording');
-        
-        // **NEW: GUARANTEED AUTO-STOP after exactly 16 bars (9.6 seconds)**
-        const exactDurationFor16Bars = 10.1; // 16 beats at 100 BPM = 9.6 seconds
+
+        updateStatus(
+            "captureStatus",
+            "🎵 Recording... Play your melody!",
+            "recording",
+        );
+
+        // Clear any existing auto-stop timeout
+        if (window.currentAutoStopTimeout) {
+            clearTimeout(window.currentAutoStopTimeout);
+            window.currentAutoStopTimeout = null;
+        }
+
+        // Backup external timeout (should match the internal one now)
         const autoStopTimeout = setTimeout(() => {
-            console.log('⏰ Auto-stopping recording after 16 bars (9.6s)');
-            stopCapture(); // This will stop both metronome and MIDI recorder
-        }, exactDurationFor16Bars * 1000); // Convert to milliseconds
-        
-        // Store the timeout ID so we can clear it if manually stopped
+            console.log("⏰ External auto-stop backup fired");
+            stopCapture();
+        }, exactDurationFor16Bars * 1000);
+
         window.currentAutoStopTimeout = autoStopTimeout;
-        
+
         // Monitor recording status
         const statusInterval = setInterval(() => {
             if (!midiRecorder.isRecording) {
+                console.log("📊 Recording finished, processing...");
                 clearInterval(statusInterval);
-                
-                // Clear the auto-stop timeout since recording already stopped
+
                 if (window.currentAutoStopTimeout) {
                     clearTimeout(window.currentAutoStopTimeout);
                     window.currentAutoStopTimeout = null;
                 }
-                
-                // CHECK THE CANCEL FLAG
-                if (midiRecorder.wasCanceled) {
-                    // Recording was canceled - don't process anything
-                    updateStatus('captureStatus', '🛑 Recording canceled', 'ready');
-                    console.log('🛑 Recording was canceled - no processing');
-                    return;
-                }
-                
-                // Normal completion - process the recording
-                const notes = midiRecorder.recordedNotes;
-                updateStatus('captureStatus', `✅ Recording finished! ${notes.length} MIDI events captured`, 'ready');
-                
-                // Auto-analyze if notes were captured
-                if (notes.length > 0) {
-                    updateStatus('captureStatus', '📤 Uploading recorded MIDI for analysis...', 'analyzing');
-                    uploadRecordedMIDI();
-                }
+
+                processRecordingResults();
             } else {
                 const notes = midiRecorder.recordedNotes;
-                const duration = (performance.now() - midiRecorder.startTime) / 1000;
-                updateStatus('captureStatus', `🎵 Recording... ${notes.length} events, ${duration.toFixed(1)}s`, 'recording');
+                const elapsedTime =
+                    (performance.now() - midiRecorder.startTime) / 1000;
+                updateStatus(
+                    "captureStatus",
+                    `🎵 Recording... ${notes.length} events, ${elapsedTime.toFixed(1)}s`,
+                    "recording",
+                );
             }
         }, 100);
     }
-    
-    function stopCapture() {
-        // Clear the auto-stop timeout if it exists
-        if (window.currentAutoStopTimeout) {
-            clearTimeout(window.currentAutoStopTimeout);
-            window.currentAutoStopTimeout = null;
-            console.log('🛑 Cleared auto-stop timeout (manual stop)');
-        }
-        
-        // Stop metronome
-        if (metronome) {
+
+    function processRecordingResults() {
+        // Reset button FIRST
+        updateRecordingButton(false);
+
+        // CRITICAL: Stop metronome when recording finishes naturally
+        if (metronome && metronome.isPlaying) {
             metronome.stop();
+            console.log("🥁 Metronome stopped after recording completion");
         }
-        
-        // Stop MIDI recording
-        if (midiRecorder.isRecording) {
-            midiRecorder.stopRecording();
+
+        // Check cancellation flag
+        if (midiRecorder.wasCanceled) {
+            console.log("🛑 Recording was canceled - no processing");
+            updateStatus("captureStatus", "🛑 Recording canceled", "ready");
+            return;
         }
-        
-        updateStatus('captureStatus', '⏹️ Recording stopped', 'ready');
+
+        // Normal completion - process the recording
+        const notes = midiRecorder.recordedNotes;
+        updateStatus(
+            "captureStatus",
+            `✅ Recording finished! ${notes.length} MIDI events captured`,
+            "ready",
+        );
+
+        // Auto-analyze if notes were captured
+        if (notes.length > 0) {
+            updateStatus(
+                "captureStatus",
+                "📤 Uploading recorded MIDI for analysis...",
+                "analyzing",
+            );
+            uploadRecordedMIDI();
+        }
     }
 
     function cancelRecording() {
-        console.log('🛑 Canceling recording - no processing will occur');
-        
-        // Clear the auto-stop timeout if it exists
+        console.log("🛑 Canceling recording - no processing will occur");
+
+        // Clear any external timeouts
         if (window.currentAutoStopTimeout) {
             clearTimeout(window.currentAutoStopTimeout);
             window.currentAutoStopTimeout = null;
-            console.log('🛑 Cleared auto-stop timeout (canceled)');
+            console.log("🛑 Cleared auto-stop timeout (canceled)");
         }
-        
+
         // Stop metronome
         if (metronome) {
             metronome.stop();
         }
-        
-        // Stop MIDI recording and clear recorded data
+
+        // Cancel MIDI recording
         if (midiRecorder.isRecording) {
             midiRecorder.cancelRecording();
         }
-        
-        // Clear any recorded notes (delete the data)
-        midiRecorder.recordedNotes = [];
-        console.log('🗑️ Cleared recorded MIDI data');
-        
-        // Reset status to ready
-        updateStatus('captureStatus', '🛑 Recording canceled', 'ready');
-        
-        // Clear any previous analysis results from overlay
-        const progressions = document.getElementById('progressions');
-        if (progressions) {
-            progressions.innerHTML = '';
-        }
-        
-        // Reset beat indicator
-        const beatCircle = document.getElementById('beatCircle');
-        const beatCount = document.getElementById('beatCount');
-        if (beatCircle && beatCount) {
-            beatCircle.classList.remove('active', 'count-in');
-            beatCount.classList.remove('count-in', 'recording');
-            beatCount.textContent = 'Ready';
+
+        // Clear cached analysis results
+        clearPreviousAnalysis();
+
+        // Reset UI elements
+        resetRecordingUI();
+
+        // Reset button
+        updateRecordingButton(false);
+
+        updateStatus("captureStatus", "🛑 Recording canceled", "ready");
+    }
+
+    function updateRecordingButton(isRecording) {
+        const button = document.getElementById("recordToggleBtn");
+        if (button) {
+            if (isRecording) {
+                button.textContent = "🟥";
+                button.className = "stop-btn";
+            } else {
+                button.textContent = "🎙️";
+                button.className = "record-btn";
+            }
+            console.log("🔄 Button updated:", button.textContent);
         }
     }
-    
-    // Upload recorded MIDI to backend
+
+    function clearPreviousAnalysis() {
+        // Clear any cached results
+        window.uploadedMidiResult = null;
+
+        // Clear overlay
+        const progressions = document.getElementById("progressions");
+        if (progressions) {
+            progressions.innerHTML = "";
+        }
+
+        console.log("🗑️ Cleared previous analysis results");
+    }
+
+    function resetRecordingUI() {
+        // Reset beat indicator
+        const beatCircle = document.getElementById("beatCircle");
+        const beatCount = document.getElementById("beatCount");
+        if (beatCircle && beatCount) {
+            beatCircle.classList.remove("active", "count-in");
+            beatCount.classList.remove("count-in", "recording");
+            // beatCount.textContent = "Ready";
+        }
+    }
+
+    // Fixed metronome startMIDIRecording method
+    function fixMetronomeStartMIDIRecording() {
+        // Replace the existing startMIDIRecording method
+        metronome.startMIDIRecording = function () {
+            console.log("🎵 Starting MIDI recording after count-in...");
+
+            const currentTempo = 100; // Fixed tempo
+            const beatsPerSecond = currentTempo / 60;
+            const durationFor16Beats = 16 / beatsPerSecond;
+
+            // Use exact duration without extra buffer for timing precision
+            const exactDuration = durationFor16Beats;
+
+            console.log(
+                `Recording: ${exactDuration.toFixed(1)}s for 16 beats at ${currentTempo} BPM`,
+            );
+
+            // Start recording with exact duration - no additional timeouts needed
+            setTimeout(() => {
+                startDirectCapture(exactDuration);
+            }, 50);
+        };
+    }
+
+    // Fixed stopCapture function
+    function stopCapture() {
+        console.log("🛑 Stop capture called");
+
+        // Clear any external timeouts
+        if (window.currentAutoStopTimeout) {
+            clearTimeout(window.currentAutoStopTimeout);
+            window.currentAutoStopTimeout = null;
+        }
+
+        // Stop metronome
+        if (metronome) {
+            metronome.stop();
+        }
+
+        // Stop MIDI recording normally (not cancel)
+        if (midiRecorder.isRecording) {
+            midiRecorder.stopRecording();
+        }
+
+        updateStatus("captureStatus", "⏹️ Recording stopped", "ready");
+    }
+
+    // Enhanced uploadRecordedMIDI with proper result handling
     async function uploadRecordedMIDI() {
         try {
-            // Convert recorded notes to MIDI file
+            // Double-check we have fresh data
+            if (
+                !midiRecorder.recordedNotes ||
+                midiRecorder.recordedNotes.length === 0
+            ) {
+                throw new Error("No recorded notes to upload");
+            }
+
+            if (midiRecorder.wasCanceled) {
+                console.log("🛑 Upload blocked - recording was canceled");
+                return;
+            }
+
             const midiBlob = midiRecorder.convertToMidiBlob();
-            
-            // Create form data for upload
+
             const formData = new FormData();
-            formData.append('file', midiBlob, 'recorded_melody.mid');
-            
-            // Upload to backend
+            formData.append("file", midiBlob, "recorded_melody.mid");
+
             const response = await fetch(`${API_BASE}/analyze/melody`, {
-                method: 'POST',
-                body: formData
+                method: "POST",
+                body: formData,
             });
-            
+
             if (!response.ok) {
                 throw new Error(`Upload failed: ${response.status}`);
             }
-            
+
             const result = await response.json();
-            
-            updateStatus('captureStatus', '✅ MIDI analyzed with auto-generated visualization!', 'ready');
-            console.log('🎹 MIDI analyzed successfully:', result);
-            
-            // Store uploaded filename for analysis
-            window.uploadedMidiResult = result;
-            
-            // AUTO-DISPLAY the analysis results with visualization
+
+            updateStatus("captureStatus", "Analysis Complete!", "ready");
+            console.log("🎹 MIDI analyzed successfully:", result);
+
+            // Display the fresh results FIRST
             displayAutoAnalysisResults(result);
-            
+
+            // THEN store the result for later use
+            window.uploadedMidiResult = result;
         } catch (error) {
-            console.error('Error uploading MIDI:', error);
-            updateStatus('captureStatus', 'Failed to upload recorded MIDI', 'error');
+            console.error("Error uploading MIDI:", error);
+            updateStatus(
+                "captureStatus",
+                "Failed to upload recorded MIDI",
+                "error",
+            );
         }
     }
 
@@ -2080,7 +2446,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
         if (chords.length % 2 !== 0) {
             return chords; // Can't be all pairs if odd number
         }
-        
+
         // Check if all consecutive pairs are the same
         let allPairs = true;
         for (let i = 0; i < chords.length; i += 2) {
@@ -2089,277 +2455,399 @@ import CircularWaveform from '../components/circular_waveform.astro';
                 break;
             }
         }
-        
+
         // If all pairs, return simplified version
         if (allPairs) {
             const simplified = [];
             for (let i = 0; i < chords.length; i += 2) {
                 simplified.push(chords[i]);
             }
-            console.log('🎵 Simplified doubled progression:', chords.join(' → '), 'to:', simplified.join(' → '));
+            console.log(
+                "🎵 Simplified doubled progression:",
+                chords.join(" → "),
+                "to:",
+                simplified.join(" → "),
+            );
             return simplified;
         }
-        
+
         return chords; // Return original if not all pairs
     }
-    
+
+    // Fixed auto analysis display with proper fresh result handling
     function displayAutoAnalysisResults(result) {
-        const progressions = document.getElementById('progressions');
+        const progressions = document.getElementById("progressions");
         if (!progressions) return;
-        
-        const detectedType = result.detected_type || 'unknown';
-        
+
+        // Verify we have a valid result
+        if (!result) {
+            console.log("⚠️ No result to display");
+            return;
+        }
+
+        const detectedType = result.detected_type || "unknown";
+        console.log("🎼 Displaying analysis results for type:", detectedType);
+
         let chords = [];
-        
-        if (detectedType === 'chord_progression') {
-            // CHORD PROGRESSION PATH - Use detected progression
-            chords = result.chord_progression || ['C', 'F', 'G', 'C'];
+
+        if (detectedType === "chord_progression") {
+            chords = result.chord_progression || ["C", "F", "G", "C"];
         } else {
-            // MELODY PATH - Use simple/pop harmonization (first option)
             if (result.harmonizations && result.harmonizations.simple_pop) {
-                chords = result.harmonizations.simple_pop.progression || ['C', 'F', 'G', 'C'];
+                chords = result.harmonizations.simple_pop.progression || [
+                    "C",
+                    "F",
+                    "G",
+                    "C",
+                ];
             } else {
-                chords = ['C', 'F', 'G', 'C']; // Fallback
+                chords = ["C", "F", "G", "C"];
             }
         }
-        
-        // Apply smart simplification for doubled progressions
+
         const simplifiedChords = simplifyChordProgression(chords);
-        
-        // Display as simple chord progression
-        progressions.innerHTML = simplifiedChords.join(' → ');
-        
-        console.log('✅ Progression displayed:', simplifiedChords.join(' → '));
+
+        // Display the chord progression
+        if (simplifiedChords && simplifiedChords.length > 0) {
+            progressions.innerHTML = simplifiedChords.join(" → ");
+            console.log(
+                "✅ Progression displayed:",
+                simplifiedChords.join(" → "),
+            );
+        } else {
+            console.log("⚠️ No valid chords to display");
+        }
     }
-    
+
     // Fixed analyzeAndGenerate - handles both chord progression and melody results
     async function analyzeAndGenerate() {
         if (!window.uploadedMidiResult) {
-            updateStatus('analysisStatus', 'Please record a melody first', 'error');
+            updateStatus(
+                "analysisStatus",
+                "Please record a melody first",
+                "error",
+            );
             return;
         }
-        
-        const harmonySelect = document.getElementById('harmonyStyle');
-        const bassSlider = document.getElementById('bassComplexity');
-        const drumSlider = document.getElementById('drumComplexity');
-        
+
+        const harmonySelect = document.getElementById("harmonyStyle");
+        const bassSlider = document.getElementById("bassComplexity");
+        const drumSlider = document.getElementById("drumComplexity");
+
         if (!harmonySelect || !bassSlider || !drumSlider) return;
-        
+
         const style = harmonySelect.value;
         const bassComplexity = parseInt(bassSlider.value);
         const drumComplexity = parseInt(drumSlider.value);
-        
-        updateStatus('analysisStatus', '🎵 Generating full arrangement...', 'analyzing');
-        
+
+        updateStatus(
+            "analysisStatus",
+            "🎵 Generating full arrangement...",
+            "analyzing",
+        );
+
         try {
             const result = window.uploadedMidiResult;
-            const detectedType = result.detected_type || 'melody';
-            
-            console.log('🔧 DEBUG: Detected type for arrangement:', detectedType);
-            console.log('🔧 DEBUG: Full result object:', result);
-            
+            const detectedType = result.detected_type || "melody";
+
+            console.log(
+                "🔧 DEBUG: Detected type for arrangement:",
+                detectedType,
+            );
+            console.log("🔧 DEBUG: Full result object:", result);
+
             let selectedProgression;
             let styleMap = {};
-            
-            if (detectedType === 'chord_progression') {
+
+            if (detectedType === "chord_progression") {
                 // CHORD PROGRESSION PATH - Use the detected progression
-                console.log('🎼 Using detected chord progression for arrangement');
-                selectedProgression = result.chord_progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C'];
-                
+                console.log(
+                    "🎼 Using detected chord progression for arrangement",
+                );
+                selectedProgression = result.chord_progression || [
+                    "C",
+                    "F",
+                    "G",
+                    "C",
+                    "Am",
+                    "F",
+                    "G",
+                    "C",
+                ];
+
                 // For chord progressions, all "styles" use the same detected progression
                 styleMap = {
-                    "simple_pop": selectedProgression,
-                    "folk_acoustic": selectedProgression,
-                    "bass_foundation": selectedProgression,
-                    "phrase_foundation": selectedProgression
+                    simple_pop: selectedProgression,
+                    folk_acoustic: selectedProgression,
+                    bass_foundation: selectedProgression,
+                    phrase_foundation: selectedProgression,
                 };
-                
-                console.log('🔧 Using chord progression:', selectedProgression);
-                
+
+                console.log("🔧 Using chord progression:", selectedProgression);
             } else {
                 // MELODY PATH - Use harmonizations as before
-                console.log('🎼 Using melody harmonizations for arrangement');
-                
+                console.log("🎼 Using melody harmonizations for arrangement");
+
                 if (!result.harmonizations) {
-                    throw new Error('No harmonizations found in melody result');
+                    throw new Error("No harmonizations found in melody result");
                 }
-                
+
                 styleMap = {
-                    "simple_pop": result.harmonizations.simple_pop?.progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C'],
-                    "folk_acoustic": result.harmonizations.folk_acoustic?.progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C'],
-                    "bass_foundation": result.harmonizations.bass_foundation?.progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C'],
-                    "phrase_foundation": result.harmonizations.phrase_foundation?.progression || ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'C']
+                    simple_pop: result.harmonizations.simple_pop
+                        ?.progression || [
+                        "C",
+                        "F",
+                        "G",
+                        "C",
+                        "Am",
+                        "F",
+                        "G",
+                        "C",
+                    ],
+                    folk_acoustic: result.harmonizations.folk_acoustic
+                        ?.progression || [
+                        "C",
+                        "F",
+                        "G",
+                        "C",
+                        "Am",
+                        "F",
+                        "G",
+                        "C",
+                    ],
+                    bass_foundation: result.harmonizations.bass_foundation
+                        ?.progression || [
+                        "C",
+                        "F",
+                        "G",
+                        "C",
+                        "Am",
+                        "F",
+                        "G",
+                        "C",
+                    ],
+                    phrase_foundation: result.harmonizations.phrase_foundation
+                        ?.progression || [
+                        "C",
+                        "F",
+                        "G",
+                        "C",
+                        "Am",
+                        "F",
+                        "G",
+                        "C",
+                    ],
                 };
-                
+
                 selectedProgression = styleMap[style];
-                console.log('🔧 Selected harmonization style:', style);
+                console.log("🔧 Selected harmonization style:", style);
             }
-            
-            console.log('🔧 Sending request with progression:', selectedProgression);
-            
+
+            console.log(
+                "🔧 Sending request with progression:",
+                selectedProgression,
+            );
+
             // Generate arrangement from the chord progression
             const response = await fetch(`${API_BASE}/generate/arrangement`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     chord_progression: selectedProgression,
                     bpm: 100,
                     bass_complexity: bassComplexity,
                     drum_complexity: drumComplexity,
                     hi_hat_divisions: 2,
-                    snare_beats: [2, 4]
-                })
+                    snare_beats: [2, 4],
+                }),
             });
-            
+
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error('Backend error response:', errorText);
-                throw new Error(`Server error: ${response.status} - ${errorText}`);
+                console.error("Backend error response:", errorText);
+                throw new Error(
+                    `Server error: ${response.status} - ${errorText}`,
+                );
             }
-            
+
             const arrangementResult = await response.json();
-            
-            console.log('🔧 Backend response full object:', JSON.stringify(arrangementResult, null, 2));
-            console.log('🔧 Backend output_file field:', arrangementResult.output_file);
-            
+
+            console.log(
+                "🔧 Backend response full object:",
+                JSON.stringify(arrangementResult, null, 2),
+            );
+            console.log(
+                "🔧 Backend output_file field:",
+                arrangementResult.output_file,
+            );
+
             if (arrangementResult.output_file) {
                 // Pass the raw filename to showMidiPlayer - it will handle all cleaning
                 showMidiPlayer(arrangementResult.output_file);
-                
+
                 // Create result object for display (handle both types)
                 let keyConfidence = 0.75; // Default confidence
-                
-                if (detectedType === 'melody' && result.harmonizations) {
+
+                if (detectedType === "melody" && result.harmonizations) {
                     // Calculate confidence from harmonizations
                     const confidences = Object.values(result.harmonizations)
-                        .map(h => h?.confidence || 0)
-                        .filter(c => c > 0);
-                    keyConfidence = confidences.length > 0 ? Math.max(...confidences) / 100 : 0.75;
+                        .map((h) => h?.confidence || 0)
+                        .filter((c) => c > 0);
+                    keyConfidence =
+                        confidences.length > 0
+                            ? Math.max(...confidences) / 100
+                            : 0.75;
                 }
-                
+
                 const fullResult = {
                     success: true,
-                    key: result.key || 'C',
+                    key: result.key || "C",
                     key_confidence: keyConfidence,
                     chord_progressions: styleMap,
-                    arrangement_file: arrangementResult.output_file.split('/').pop(), // Just filename for download link
+                    arrangement_file: arrangementResult.output_file
+                        .split("/")
+                        .pop(), // Just filename for download link
                     visualization_file: null,
                     visualization_url: null,
                     detected_type: detectedType,
-                    analysis_path: result.analysis_path || detectedType
+                    analysis_path: result.analysis_path || detectedType,
                 };
-                
-                updateStatus('analysisStatus', '✅ Analysis and arrangement complete!', 'ready');
+
+                updateStatus(
+                    "analysisStatus",
+                    "✅ Analysis and arrangement complete!",
+                    "ready",
+                );
                 displayFullResults(fullResult);
-                
             } else {
-                console.error('No output_file in response:', arrangementResult);
-                updateStatus('analysisStatus', `❌ ${arrangementResult.message || 'No arrangement file returned'}`, 'error');
+                console.error("No output_file in response:", arrangementResult);
+                updateStatus(
+                    "analysisStatus",
+                    `❌ ${arrangementResult.message || "No arrangement file returned"}`,
+                    "error",
+                );
             }
         } catch (error) {
-            console.error('Error in analyzeAndGenerate:', error);
-            updateStatus('analysisStatus', `Analysis error: ${error.message}`, 'error');
+            console.error("Error in analyzeAndGenerate:", error);
+            updateStatus(
+                "analysisStatus",
+                `Analysis error: ${error.message}`,
+                "error",
+            );
         }
     }
-    
+
     // Display Functions
     function displayFullResults(result) {
-        const resultsSection = document.getElementById('results');
-        const keyInfo = document.getElementById('keyInfo');
-        const progressions = document.getElementById('progressions');
-        const arrangementLink = document.getElementById('arrangementLink');
-        const visualizationLink = document.getElementById('visualizationLink');
-        
-        if (!resultsSection || !keyInfo || !progressions || !arrangementLink || !visualizationLink) return;
-        
-        resultsSection.style.display = 'block';
-        
-        keyInfo.innerHTML = 
-            `<strong>Detected Key:</strong> ${result.key} (confidence: ${result.key_confidence.toFixed(2)})`;
-        
-        let progressionsHtml = '<h4>Chord Progressions:</h4>';
+        const resultsSection = document.getElementById("results");
+        const keyInfo = document.getElementById("keyInfo");
+        const progressions = document.getElementById("progressions");
+        const arrangementLink = document.getElementById("arrangementLink");
+        const visualizationLink = document.getElementById("visualizationLink");
+
+        if (
+            !resultsSection ||
+            !keyInfo ||
+            !progressions ||
+            !arrangementLink ||
+            !visualizationLink
+        )
+            return;
+
+        resultsSection.style.display = "block";
+
+        keyInfo.innerHTML = `<strong>Detected Key:</strong> ${result.key} (confidence: ${result.key_confidence.toFixed(2)})`;
+
+        let progressionsHtml = "<h4>Chord Progressions:</h4>";
         Object.entries(result.chord_progressions).forEach(([style, chords]) => {
             progressionsHtml += `<div>
                 <strong>${style}:</strong> 
-                <div class="chord-progression">${chords.join(' → ')}</div>
+                <div class="chord-progression">${chords.join(" → ")}</div>
             </div>`;
         });
         progressions.innerHTML = progressionsHtml;
-        
+
         if (result.arrangement_file) {
-            arrangementLink.innerHTML = 
-                `<strong>Generated Arrangement:</strong> <a href="/generated_arrangements/${result.arrangement_file}" download>📥 Download MIDI (${result.arrangement_file})</a>`;
+            arrangementLink.innerHTML = `<strong>Generated Arrangement:</strong> <a href="/generated_arrangements/${result.arrangement_file}" download>📥 Download MIDI (${result.arrangement_file})</a>`;
         } else {
-            arrangementLink.innerHTML = '<em>No arrangement file generated</em>';
+            arrangementLink.innerHTML =
+                "<em>No arrangement file generated</em>";
         }
-        
+
         if (result.visualization_file) {
-            visualizationLink.innerHTML = 
-                `<strong>Visualization:</strong> <a href="${API_BASE}${result.visualization_url}" target="_blank" rel="noopener">📊 View Chord Progression Chart</a>`;
+            visualizationLink.innerHTML = `<strong>Visualization:</strong> <a href="${API_BASE}${result.visualization_url}" target="_blank" rel="noopener">📊 View Chord Progression Chart</a>`;
         } else {
-            visualizationLink.innerHTML = '';
+            visualizationLink.innerHTML = "";
         }
     }
-    
+
     // Utility Functions
     function updateStatus(elementId, message, type) {
         const element = document.getElementById(elementId);
         if (!element) return;
-        
+
         element.textContent = message;
         element.className = `status ${type}`;
     }
 
     // Initialize everything
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('🚀 DOM loaded, initializing...');
-        
+    document.addEventListener("DOMContentLoaded", function () {
+        console.log("🚀 DOM loaded, initializing...");
+
         // Initialize objects
         pianoSynth = new PianoSynth();
         midiRecorder = new MidiRecorder();
-        
+
         // Start spectrum detection
         setTimeout(() => findSpectrumInstance(), 1000);
-        
+
         // Load MIDI devices
         loadDevices();
-        
+
         // Setup event listeners for sliders
-        const bassComplexity = document.getElementById('bassComplexity');
-        const drumComplexity = document.getElementById('drumComplexity');
-        const bassValue = document.getElementById('bassValue');
-        const drumValue = document.getElementById('drumValue');
-        
+        const bassComplexity = document.getElementById("bassComplexity");
+        const drumComplexity = document.getElementById("drumComplexity");
+        const bassValue = document.getElementById("bassValue");
+        const drumValue = document.getElementById("drumValue");
+
         if (bassComplexity && bassValue) {
-            bassComplexity.addEventListener('input', function(e) {
+            bassComplexity.addEventListener("input", function (e) {
                 bassValue.textContent = e.target.value;
             });
         }
-        
+
         if (drumComplexity && drumValue) {
-            drumComplexity.addEventListener('input', function(e) {
+            drumComplexity.addEventListener("input", function (e) {
                 drumValue.textContent = e.target.value;
             });
         }
-        
+
         // Piano controls
-        const pianoVolume = document.getElementById('pianoVolume');
-        const pianoSound = document.getElementById('pianoSound');
-        const volumeValue = document.getElementById('volumeValue');
-        
+        const pianoVolume = document.getElementById("pianoVolume");
+        const pianoSound = document.getElementById("pianoSound");
+        const volumeValue = document.getElementById("volumeValue");
+
         if (pianoVolume && volumeValue) {
-            pianoVolume.addEventListener('input', function(e) {
+            pianoVolume.addEventListener("input", function (e) {
                 const volume = parseInt(e.target.value);
-                volumeValue.textContent = volume + '%';
+                volumeValue.textContent = volume + "%";
                 pianoSynth.setVolume(volume);
             });
         }
-        
+
         if (pianoSound) {
-            pianoSound.addEventListener('change', function(e) {
+            pianoSound.addEventListener("change", function (e) {
                 pianoSynth.setSoundType(e.target.value);
             });
         }
+
+        // At the end of your existing DOMContentLoaded function, add:
+        setTimeout(() => {
+            if (metronome) {
+                fixMetronomeStartMIDIRecording();
+                console.log("🔧 Metronome startMIDIRecording method fixed");
+            }
+        }, 1000);
     });
 
     // Make functions globally accessible
@@ -2372,7 +2860,7 @@ import CircularWaveform from '../components/circular_waveform.astro';
     window.stopMidi = stopMidi;
     window.toggleMidiLoop = toggleMidiLoop;
     window.retryVisualizerConnection = retryVisualizerConnection;
-    
+
     window.togglePianoControls = togglePianoControls;
     window.autoConnect = autoConnect;
     window.updateMidiBarVolume = updateMidiBarVolume;
@@ -2380,6 +2868,5 @@ import CircularWaveform from '../components/circular_waveform.astro';
     window.updateMidiBarStatus = updateMidiBarStatus;
 
     window.cancelRecording = cancelRecording;
-    </script>
-</body>
-</html>
+    window.toggleRecording = toggleRecording;
+</script>
