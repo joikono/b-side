@@ -39,186 +39,181 @@ import CircularWaveform from "../components/circular_waveform.astro";
             </div>
         </div>
 
-        <!-- Hidden Content Cards (can be toggled) -->
-        <main class="floating-content" style="display: none;">
-            <!-- Generate Card -->
-            <div class="content-card generate-card">
-                <h3>🎼 Generate Full Arrangement</h3>
-                <label>
-                    Harmonization Style:
-                    <select id="harmonyStyle">
-                        <option value="simple_pop">Simple/Pop</option>
-                        <option value="folk_acoustic">Folk/Acoustic</option>
-                        <option value="bass_foundation">Bass Foundation</option>
-                        <option value="phrase_foundation"
-                            >Phrase Foundation</option
-                        >
-                    </select>
-                </label>
-                <br />
-                <label>
-                    Bass Complexity:
-                    <input
-                        type="range"
-                        id="bassComplexity"
-                        min="1"
-                        max="3"
-                        value="1"
-                    />
-                    <span id="bassValue">1</span>
-                </label>
-                <br />
-                <label>
-                    Drum Complexity:
-                    <input
-                        type="range"
-                        id="drumComplexity"
-                        min="1"
-                        max="3"
-                        value="1"
-                    />
-                    <span id="drumValue">1</span>
-                </label>
-                <br />
-
-                <div class="button-group">
-                    <button class="analyze-btn" onclick="analyzeAndGenerate()"
-                        >🎼 Generate Full Arrangement</button
-                    >
-                </div>
-                <div id="analysisStatus" class="status ready">
-                    Ready to generate arrangement
-                </div>
-            </div>
-
-            <!-- Results Card -->
-            <div
-                class="content-card results-card"
-                id="results"
-                style="display: none;"
-            >
-                <!-- Integrated MIDI Player -->
-                <div
-                    id="midiPlayerSection"
-                    class="midi-player-section"
-                    style="display: none;"
-                >
-                    <h4>🎵 Play Your Generated Arrangement</h4>
-                    <p>
-                        Listen to your AI-generated arrangement with seamless
-                        16-beat looping
-                    </p>
-
-                    <div class="player-container">
-                        <!-- MIDI player with native loop attribute -->
-                        <midi-player
-                            id="arrangementPlayer"
-                            src=""
-                            sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
-                            visualizer="#myVisualizer"
-                            loop
-                        >
-                        </midi-player>
-                        <!-- Custom controls for the player -->
-                        <div class="midi-controls">
-                            <div class="button-row">
-                                <button
-                                    onclick="toggleMidiPlay()"
-                                    class="midi-btn">⏯️ Play/Pause</button
-                                >
-                                <button onclick="stopMidi()" class="midi-btn"
-                                    >⏹️ Stop</button
-                                >
-                                <button
-                                    onclick="toggleMidiLoop()"
-                                    class="midi-btn"
-                                    >🔄 <span id="midiLoopStatus"
-                                        >Loop: OFF</span
-                                    ></button
-                                >
-                            </div>
-
-                            <div class="midi-debug-info">
-                                <h5>🔍 Playback Info:</h5>
-                                <div id="midiPlayerInfo">Player ready...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
-
         <!-- Sticky MIDI Control Bar -->
         <div class="midi-control-bar">
             <div class="midi-bar-content">
-                <!-- Piano Controls (expandable) -->
-                <div class="piano-controls-container">
-                    <button
-                        class="piano-controls-toggle"
-                        onclick="togglePianoControls()"
-                        title="Piano Settings"
+                <!-- LEFT SECTION: Arrangement Controls -->
+                <div class="left-controls">
+                    <!-- Compact MIDI Player (initially hidden) - positioned above arrangement controls -->
+                    <div
+                        id="stickyMidiPlayer"
+                        class="sticky-midi-player"
+                        style="display: none;"
                     >
-                        🎹
-                    </button>
-                    <!-- Expandable Piano Menu -->
-                    <div id="pianoControlsMenu" class="piano-controls-menu">
-                        <div class="midi-device-section">
-                            <select
-                                id="deviceSelect"
-                                class="midi-dropdown"
-                                onchange="autoConnect()"
-                            >
-                                <option value="">Select MIDI Device...</option>
-                            </select>
+                        <midi-player
+                            id="stickyArrangementPlayer"
+                            src=""
+                            sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
+                            loop
+                        >
+                        </midi-player>
+                        <div class="sticky-midi-controls">
                             <button
-                                class="refresh-btn"
-                                onclick="loadDevices()"
-                                title="Refresh Devices"
+                                onclick="stopStickyMidi()"
+                                class="mini-midi-btn">⏹️</button
                             >
-                                🔄
-                            </button>
-                        </div>
-                        <div class="control-group">
-                            <label>Volume:</label>
-                            <input
-                                type="range"
-                                id="pianoVolume"
-                                min="0"
-                                max="100"
-                                value="15"
-                                oninput="updateMidiBarVolume(this.value)"
-                            />
-                            <span id="volumeValue">15%</span>
-                        </div>
-                        <div class="control-group">
-                            <label>Sound:</label>
-                            <select
-                                id="pianoSound"
-                                onchange="updateMidiBarSound(this.value)"
+                            <button
+                                onclick="toggleStickyMidiLoop()"
+                                class="mini-midi-btn">🔄</button
                             >
-                                <option value="piano">Piano</option>
-                                <option value="electric">Electric</option>
-                                <option value="organ">Organ</option>
-                                <option value="synth">Synth</option>
-                            </select>
+                            <button
+                                onclick="downloadCurrentMidi()"
+                                class="mini-midi-btn download-btn"
+                                title="Download MIDI">💾</button
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Arrangement controls in horizontal wrapper -->
+                    <div class="arrangement-controls-container">
+                        <button
+                            class="arrangement-controls-toggle"
+                            onclick="toggleArrangementControls()"
+                            title="Arrangement Settings"
+                        >
+                            🎼
+                        </button>
+                        <!-- Expandable Arrangement Menu -->
+                        <div
+                            id="arrangementControlsMenu"
+                            class="arrangement-controls-menu"
+                        >
+                            <div class="control-group">
+                                <label>Style:</label>
+                                <select id="stickyHarmonyStyle">
+                                    <option value="simple_pop"
+                                        >Simple/Pop</option
+                                    >
+                                    <option value="folk_acoustic"
+                                        >Folk/Acoustic</option
+                                    >
+                                    <option value="bass_foundation"
+                                        >Bass Foundation</option
+                                    >
+                                    <option value="phrase_foundation"
+                                        >Phrase Foundation</option
+                                    >
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label>Bass:</label>
+                                <input
+                                    type="range"
+                                    id="stickyBassComplexity"
+                                    min="1"
+                                    max="3"
+                                    value="1"
+                                />
+                                <span id="stickyBassValue">1</span>
+                            </div>
+                            <div class="control-group">
+                                <label>Drums:</label>
+                                <input
+                                    type="range"
+                                    id="stickyDrumComplexity"
+                                    min="1"
+                                    max="3"
+                                    value="1"
+                                />
+                                <span id="stickyDrumValue">1</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Generate Arrangement Button -->
+                    <button
+                        id="stickyGenerateBtn"
+                        class="generate-arrangement-btn"
+                        onclick="analyzeAndGenerate()"
+                        title="Generate Full Arrangement"
+                    >
+                        🎵 Generate
+                    </button>
+                </div>
+
+                <!-- CENTER SECTION: Piano Controls -->
+                <div class="center-controls">
+                    <div class="piano-controls-container">
+                        <button
+                            class="piano-controls-toggle"
+                            onclick="togglePianoControls()"
+                            title="Piano Settings"
+                        >
+                            🎹
+                        </button>
+                        <!-- Expandable Piano Menu -->
+                        <div id="pianoControlsMenu" class="piano-controls-menu">
+                            <div class="midi-device-section">
+                                <select
+                                    id="deviceSelect"
+                                    class="midi-dropdown"
+                                    onchange="autoConnect()"
+                                >
+                                    <option value=""
+                                        >Select MIDI Device...</option
+                                    >
+                                </select>
+                                <button
+                                    class="refresh-btn"
+                                    onclick="loadDevices()"
+                                    title="Refresh Devices"
+                                >
+                                    🔄
+                                </button>
+                            </div>
+                            <div class="control-group">
+                                <label>Volume:</label>
+                                <input
+                                    type="range"
+                                    id="pianoVolume"
+                                    min="0"
+                                    max="100"
+                                    value="10"
+                                    oninput="updateMidiBarVolume(this.value)"
+                                />
+                                <span id="volumeValue">10%</span>
+                            </div>
+                            <div class="control-group">
+                                <label>Sound:</label>
+                                <select
+                                    id="pianoSound"
+                                    onchange="updateMidiBarSound(this.value)"
+                                >
+                                    <option value="piano">Piano</option>
+                                    <option value="electric">Electric</option>
+                                    <option value="organ">Organ</option>
+                                    <option value="synth">Synth</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="button-group">
-                    <button
-                        id="recordToggleBtn"
-                        class="record-btn"
-                        onclick="toggleRecording()"
-                    >
-                        🎙️
-                    </button>
-                </div>
-                <div id="captureStatus" class="status ready">
-                    Ready to record
-                </div>
-                <div id="beatIndicator" class="beat-indicator">
-                    <div class="beat-circle" id="beatCircle"></div>
-                    <div class="beat-count" id="beatCount"></div>
+
+                <!-- RIGHT SECTION: Record & Metronome -->
+                <div class="right-controls">
+                    <div class="button-group">
+                        <button
+                            id="recordToggleBtn"
+                            class="record-btn"
+                            onclick="toggleRecording()"
+                        >
+                            🎙️
+                        </button>
+                    </div>
+                    <div id="beatIndicator" class="beat-indicator">
+                        <div class="beat-circle" id="beatCircle"></div>
+                        <div class="beat-count" id="beatCount"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -465,6 +460,307 @@ import CircularWaveform from "../components/circular_waveform.astro";
         color: #2c3e50;
     }
 
+    /* Sticky MIDI Control Bar */
+    .midi-control-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 70px;
+        background: linear-gradient(
+            135deg,
+            rgba(44, 62, 80, 0.95),
+            rgba(52, 73, 94, 0.95)
+        );
+        border-top: 2px solid #3498db;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        backdrop-filter: blur(20px);
+    }
+
+    /* Updated Layout: Left-Center-Right Distribution */
+    .midi-bar-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+
+    .left-controls,
+    .center-controls,
+    .right-controls {
+        display: flex;
+        align-items: center; /* Ensures all items are vertically centered */
+        gap: 15px;
+    }
+
+    /* Left Controls - Flexible layout for MIDI player above arrangement controls */
+    .left-controls {
+        position: relative; /* Add this */
+        justify-content: flex-start;
+        flex: 1;
+        flex-direction: row; /* Change back to row */
+        align-items: center; /* Change back to center */
+        gap: 15px; /* Change back to 15px */
+    }
+
+    /* Arrangement controls container - horizontal layout */
+    .arrangement-controls-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    /* Center Controls - Piano */
+    .center-controls {
+        justify-content: center;
+        flex: 1;
+    }
+
+    /* Right Controls - Record & Metronome */
+    .right-controls {
+        justify-content: flex-end;
+        flex: 1;
+    }
+
+    /* Arrangement Controls */
+    .arrangement-controls-container {
+        position: relative;
+    }
+
+    .arrangement-controls-toggle {
+        width: 45px;
+        height: 45px;
+        border: 2px solid #e74c3c;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+        color: white;
+        font-size: 18px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .arrangement-controls-toggle:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+    }
+
+    .arrangement-controls-toggle.active {
+        background: linear-gradient(135deg, #c0392b, #a93226);
+    }
+
+    .arrangement-controls-menu {
+        position: absolute;
+        bottom: 55px;
+        left: 0;
+        width: 280px;
+        background: white;
+        border: 2px solid #e74c3c;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 -5px 25px rgba(0, 0, 0, 0.3);
+        transform: translateY(20px);
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        z-index: 1001;
+    }
+
+    .arrangement-controls-menu.show {
+        transform: translateY(0);
+        opacity: 1;
+        visibility: visible;
+    }
+
+    /* Generate Arrangement Button */
+    .generate-arrangement-btn {
+        padding: 12px 20px;
+        border: 2px solid #f39c12;
+        border-radius: 25px;
+        background: linear-gradient(135deg, #f39c12, #e67e22);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 14px;
+        white-space: nowrap;
+    }
+
+    .generate-arrangement-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
+    }
+
+    .generate-arrangement-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* Piano Controls */
+    .piano-controls-container {
+        position: relative;
+    }
+
+    .piano-controls-toggle {
+        width: 45px;
+        height: 45px;
+        border: 2px solid #9b59b6;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        color: white;
+        font-size: 18px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .piano-controls-toggle:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(155, 89, 182, 0.4);
+    }
+
+    .piano-controls-menu {
+        position: absolute;
+        bottom: 55px;
+        left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        width: 320px;
+        background: white;
+        border: 2px solid #9b59b6;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 -5px 25px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        z-index: 9999 !important;
+    }
+
+    .piano-controls-menu.show {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+        visibility: visible;
+    }
+
+    /* MIDI Device Section */
+    .midi-device-section {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+
+    .midi-dropdown {
+        flex: 1;
+        padding: 8px 12px;
+        border: 2px solid #3498db;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.9);
+        color: #2c3e50;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        outline: none;
+    }
+
+    .refresh-btn {
+        width: 35px;
+        height: 35px;
+        border: 2px solid #27ae60;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #27ae60, #2ecc71);
+        color: white;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .refresh-btn:hover {
+        transform: scale(1.1);
+        box-shadow: 0 2px 8px rgba(39, 174, 96, 0.4);
+    }
+
+    /* Sticky MIDI Player - positioned above arrangement controls */
+    .sticky-midi-player {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 2px solid #27ae60;
+        border-radius: 12px;
+        padding: 6px 10px;
+        max-width: 420px;
+        align-self: flex-start; /* Align to left */
+    }
+
+    .sticky-midi-player midi-player {
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        height: 35px;
+        width: 220px;
+        flex-shrink: 1;
+    }
+
+    .sticky-midi-controls {
+        display: flex;
+        gap: 5px;
+    }
+
+    .mini-midi-btn {
+        width: 30px;
+        height: 30px;
+        border: 1px solid #27ae60;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #27ae60, #2ecc71);
+        color: white;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .mini-midi-btn:hover {
+        transform: scale(1.1);
+        box-shadow: 0 2px 8px rgba(39, 174, 96, 0.4);
+    }
+
+    .control-group {
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .control-group label {
+        min-width: 60px;
+        font-weight: 600;
+        color: #2c3e50;
+        font-size: 13px;
+        margin: 0;
+    }
+
     /* Button Styles */
     button {
         padding: 12px 20px;
@@ -483,8 +779,22 @@ import CircularWaveform from "../components/circular_waveform.astro";
     }
 
     .record-btn {
-        background: linear-gradient(45deg, #ffffff, #ffffff);
+        background: linear-gradient(45deg, #e74c3c, #c0392b);
         color: white;
+        width: 45px;
+        height: 45px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        margin: 0;
+        padding: 0;
+    }
+
+    .record-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
     }
 
     .stop-btn {
@@ -500,8 +810,9 @@ import CircularWaveform from "../components/circular_waveform.astro";
     .button-group {
         display: flex;
         justify-content: center;
+        align-items: center;
         gap: 10px;
-        margin: 20px 0;
+        margin: 0;
     }
 
     /* Status Styles */
@@ -546,26 +857,33 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }
     }
 
-    /* Metronome Styles */
+    /* Right Controls - ensure vertical centering */
+    .right-controls {
+        justify-content: flex-end;
+        flex: 1;
+        align-items: center; /* This ensures vertical alignment */
+    }
+
+    /* Metronome Styles - Horizontal Layout */
     .beat-indicator {
         display: flex;
-        flex-direction: column;
+        flex-direction: row; /* Changed to row for horizontal layout */
         align-items: center;
-        padding-top: 30px;
+        gap: 10px; /* Space between circle and text */
         background: none;
     }
 
     .beat-circle {
-        width: 40px;
-        height: 40px;
+        width: 35px;
+        height: 35px;
         border-radius: 50%;
         background: linear-gradient(135deg, #6c757d, #495057);
-        margin-bottom: 10px;
         transition: all 0.1s ease;
         display: flex;
         align-items: center;
         justify-content: center;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        flex-shrink: 0; /* Prevent shrinking */
     }
 
     .beat-circle.active {
@@ -581,15 +899,18 @@ import CircularWaveform from "../components/circular_waveform.astro";
     }
 
     .beat-count {
-        font-size: 18px;
+        font-size: 14px;
         font-weight: bold;
-        color: #495057;
-        min-height: 22px;
-        text-align: center;
+        color: white;
+        min-height: 18px;
+        text-align: left; /* Changed from center to left */
+        white-space: nowrap; /* Prevent text wrapping */
+        width: 60px; /* Fixed width to prevent layout shift */
+        flex-shrink: 0; /* Prevent shrinking */
     }
 
     .beat-count.count-in {
-        font-size: 24px;
+        font-size: 18px;
         color: #e67e22;
         animation: pulse-count 0.6s ease-in-out;
     }
@@ -633,125 +954,88 @@ import CircularWaveform from "../components/circular_waveform.astro";
         padding: 20px;
     }
 
-    /* Sticky MIDI Control Bar */
-    .midi-control-bar {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 70px;
-        background: linear-gradient(
-            135deg,
-            rgba(44, 62, 80, 0.95),
-            rgba(52, 73, 94, 0.95)
-        );
-        border-top: 2px solid #3498db;
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
-        z-index: 1000;
-        backdrop-filter: blur(20px);
+    /* Responsive adjustments */
+    @media (max-width: 1200px) {
+        .midi-bar-content {
+            gap: 10px;
+            padding: 0 15px;
+        }
+
+        .left-controls,
+        .center-controls,
+        .right-controls {
+            gap: 10px;
+        }
+
+        .sticky-midi-player {
+            max-width: 200px;
+        }
+
+        .sticky-midi-player midi-player {
+            width: 120px;
+        }
+
+        .generate-arrangement-btn {
+            padding: 10px 15px;
+            font-size: 12px;
+        }
+
+        .arrangement-controls-menu,
+        .piano-controls-menu {
+            width: 240px;
+        }
     }
 
-    .midi-bar-content {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 0 20px;
-        gap: 20px;
-    }
+    @media (max-width: 768px) {
+        .midi-bar-content {
+            flex-direction: row;
+            justify-content: space-between;
+            gap: 5px;
+        }
 
-    .midi-device-section {
-        display: flex;
-        justify-content: center;
-        width: 200px;
-    }
+        .left-controls {
+            gap: 5px;
+        }
 
-    .midi-dropdown {
-        width: 100%;
-        padding: 10px 15px;
-        border: 2px solid #3498db;
-        border-radius: 25px;
-        background: rgba(255, 255, 255, 0.9);
-        color: #2c3e50;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        outline: none;
-    }
+        .center-controls,
+        .right-controls {
+            flex: none;
+            gap: 5px;
+        }
 
-    .refresh-btn {
-        width: 45px;
-        height: 45px;
-        border: 2px solid #27ae60;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #27ae60, #2ecc71);
-        color: white;
-        font-size: 18px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+        .sticky-midi-player {
+            max-width: 200px;
+            padding: 4px 6px;
+        }
 
-    .piano-controls-container {
-        position: relative;
-    }
+        .sticky-midi-player midi-player {
+            width: 120px;
+            height: 30px;
+        }
 
-    .piano-controls-toggle {
-        width: 45px;
-        height: 45px;
-        border: 2px solid #9b59b6;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #9b59b6, #8e44ad);
-        color: white;
-        font-size: 18px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+        .generate-arrangement-btn {
+            font-size: 11px;
+            padding: 8px 12px;
+        }
 
-    .piano-controls-menu {
-        position: absolute;
-        bottom: 55px;
-        right: 0;
-        width: 320px;
-        background: white;
-        border: 2px solid #9b59b6;
-        border-radius: 15px;
-        padding: 20px;
-        box-shadow: 0 -5px 25px rgba(0, 0, 0, 0.3);
-        transform: translateY(20px);
-        opacity: 0;
-        visibility: hidden;
-        transition: all 0.3s ease;
-        z-index: 1001;
-    }
+        .arrangement-controls-menu,
+        .piano-controls-menu {
+            width: 200px;
+        }
 
-    .piano-controls-menu.show {
-        transform: translateY(0);
-        opacity: 1;
-        visibility: visible;
-    }
+        .beat-circle {
+            width: 30px;
+            height: 30px;
+        }
 
-    .control-group {
-        margin-bottom: 15px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
+        .beat-count {
+            font-size: 12px;
+            width: 50px; /* Smaller fixed width on mobile */
+        }
 
-    .control-group label {
-        min-width: 60px;
-        font-weight: 600;
-        color: #2c3e50;
-        font-size: 13px;
-        margin: 0;
+        .beat-indicator {
+            gap: 8px; /* Smaller gap on mobile */
+        }
     }
 
     /* Responsive Design */
@@ -763,10 +1047,6 @@ import CircularWaveform from "../components/circular_waveform.astro";
         .content-card {
             padding: 20px;
             margin: 0 10px;
-        }
-
-        .button-group {
-            flex-direction: column;
         }
     }
 </style>
@@ -794,6 +1074,9 @@ import CircularWaveform from "../components/circular_waveform.astro";
     const beatsPerLoop = 16;
     let midiCheckLoopInterval;
 
+    // Arrangement controls functionality
+    let isArrangementMenuOpen = false;
+
     // Add these to your existing script section
     function autoConnect() {
         const deviceSelect = document.getElementById("deviceSelect");
@@ -818,6 +1101,32 @@ import CircularWaveform from "../components/circular_waveform.astro";
             }
         }
     }
+
+    // Toggle arrangement controls menu
+    function toggleArrangementControls() {
+        const menu = document.getElementById("arrangementControlsMenu");
+        const toggle = document.querySelector(".arrangement-controls-toggle");
+
+        isArrangementMenuOpen = !isArrangementMenuOpen;
+
+        if (isArrangementMenuOpen) {
+            menu.classList.add("show");
+            toggle.classList.add("active");
+        } else {
+            menu.classList.remove("show");
+            toggle.classList.remove("active");
+        }
+    }
+
+    // Close arrangement menu when clicking outside
+    document.addEventListener("click", function (event) {
+        const container = document.querySelector(
+            ".arrangement-controls-container",
+        );
+        if (!container.contains(event.target) && isArrangementMenuOpen) {
+            toggleArrangementControls();
+        }
+    });
 
     // Toggle piano controls menu
     function togglePianoControls() {
@@ -2523,16 +2832,23 @@ import CircularWaveform from "../components/circular_waveform.astro";
     async function analyzeAndGenerate() {
         if (!window.uploadedMidiResult) {
             updateStatus(
-                "analysisStatus",
+                "captureStatus",
                 "Please record a melody first",
                 "error",
             );
             return;
         }
 
-        const harmonySelect = document.getElementById("harmonyStyle");
-        const bassSlider = document.getElementById("bassComplexity");
-        const drumSlider = document.getElementById("drumComplexity");
+        // Get values from sticky bar (fallback to main form if sticky bar elements don't exist)
+        const harmonySelect =
+            document.getElementById("stickyHarmonyStyle") ||
+            document.getElementById("harmonyStyle");
+        const bassSlider =
+            document.getElementById("stickyBassComplexity") ||
+            document.getElementById("bassComplexity");
+        const drumSlider =
+            document.getElementById("stickyDrumComplexity") ||
+            document.getElementById("drumComplexity");
 
         if (!harmonySelect || !bassSlider || !drumSlider) return;
 
@@ -2540,8 +2856,15 @@ import CircularWaveform from "../components/circular_waveform.astro";
         const bassComplexity = parseInt(bassSlider.value);
         const drumComplexity = parseInt(drumSlider.value);
 
+        // Disable generate button during processing
+        const generateBtn = document.getElementById("stickyGenerateBtn");
+        if (generateBtn) {
+            generateBtn.disabled = true;
+            generateBtn.textContent = "🎵 Generating...";
+        }
+
         updateStatus(
-            "analysisStatus",
+            "captureStatus",
             "🎵 Generating full arrangement...",
             "analyzing",
         );
@@ -2685,6 +3008,9 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 // Pass the raw filename to showMidiPlayer - it will handle all cleaning
                 showMidiPlayer(arrangementResult.output_file);
 
+                // ADD THIS LINE - Show it in the sticky bar too
+                showStickyMidiPlayer(arrangementResult.output_file);
+
                 // Create result object for display (handle both types)
                 let keyConfidence = 0.75; // Default confidence
 
@@ -2734,6 +3060,82 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 `Analysis error: ${error.message}`,
                 "error",
             );
+        }
+    }
+
+    // Show sticky MIDI player
+    function showStickyMidiPlayer(arrangementFilename) {
+        const stickyPlayer = document.getElementById("stickyMidiPlayer");
+        const stickyMidiElement = document.getElementById(
+            "stickyArrangementPlayer",
+        );
+        const generateBtn = document.getElementById("stickyGenerateBtn");
+
+        if (stickyPlayer && stickyMidiElement) {
+            // Clean filename (same logic as your existing showMidiPlayer)
+            let justFilename = arrangementFilename;
+            justFilename = justFilename.replace(/^https?:\/\/[^\/]+/, "");
+            justFilename = justFilename.replace(/^\/+/, "");
+            if (justFilename.includes("/")) {
+                justFilename = justFilename.split("/").pop();
+            }
+            if (justFilename.includes("\\")) {
+                justFilename = justFilename.split("\\").pop();
+            }
+            justFilename = justFilename.replace(
+                /.*generated_arrangements[\/\\]/,
+                "",
+            );
+            while (justFilename.includes("/") || justFilename.includes("\\")) {
+                justFilename = justFilename.split(/[\/\\]/).pop();
+            }
+
+            const finalPath = `/generated_arrangements/${justFilename}`;
+
+            // Set source and show player
+            stickyMidiElement.src = finalPath;
+            stickyPlayer.style.display = "flex";
+
+            console.log("🎵 Sticky MIDI Player loaded:", finalPath);
+        }
+
+        // Re-enable generate button
+        if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.textContent = "🎵 Generate";
+        }
+    }
+
+    function stopStickyMidi() {
+        const player = document.getElementById("stickyArrangementPlayer");
+        if (player) {
+            player.stop();
+            player.currentTime = 0;
+        }
+    }
+
+    function toggleStickyMidiLoop() {
+        const player = document.getElementById("stickyArrangementPlayer");
+        if (player) {
+            player.loop = !player.loop;
+            // Update button text or add visual indicator if needed
+            console.log("Sticky player loop:", player.loop ? "ON" : "OFF");
+        }
+    }
+
+    function downloadCurrentMidi() {
+        const player = document.getElementById("stickyArrangementPlayer");
+        if (player && player.src) {
+            const filename = player.src.split("/").pop();
+            const link = document.createElement("a");
+            link.href = player.src;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            console.log("🎵 Downloading:", filename);
+        } else {
+            console.log("❌ No MIDI file loaded to download");
         }
     }
 
@@ -2822,6 +3224,28 @@ import CircularWaveform from "../components/circular_waveform.astro";
             });
         }
 
+        // Update slider values
+        const stickyBassComplexity = document.getElementById(
+            "stickyBassComplexity",
+        );
+        const stickyDrumComplexity = document.getElementById(
+            "stickyDrumComplexity",
+        );
+        const stickyBassValue = document.getElementById("stickyBassValue");
+        const stickyDrumValue = document.getElementById("stickyDrumValue");
+
+        if (stickyBassComplexity && stickyBassValue) {
+            stickyBassComplexity.addEventListener("input", function (e) {
+                stickyBassValue.textContent = e.target.value;
+            });
+        }
+
+        if (stickyDrumComplexity && stickyDrumValue) {
+            stickyDrumComplexity.addEventListener("input", function (e) {
+                stickyDrumValue.textContent = e.target.value;
+            });
+        }
+
         // Piano controls
         const pianoVolume = document.getElementById("pianoVolume");
         const pianoSound = document.getElementById("pianoSound");
@@ -2860,13 +3284,15 @@ import CircularWaveform from "../components/circular_waveform.astro";
     window.stopMidi = stopMidi;
     window.toggleMidiLoop = toggleMidiLoop;
     window.retryVisualizerConnection = retryVisualizerConnection;
-
     window.togglePianoControls = togglePianoControls;
+    window.toggleArrangementControls = toggleArrangementControls;
     window.autoConnect = autoConnect;
     window.updateMidiBarVolume = updateMidiBarVolume;
     window.updateMidiBarSound = updateMidiBarSound;
     window.updateMidiBarStatus = updateMidiBarStatus;
-
     window.cancelRecording = cancelRecording;
     window.toggleRecording = toggleRecording;
+    window.stopStickyMidi = stopStickyMidi;
+    window.toggleStickyMidiLoop = toggleStickyMidiLoop;
+    window.downloadCurrentMidi = downloadCurrentMidi;
 </script>
