@@ -1,6 +1,10 @@
 pip install -r requirements.txt
 
-todo: tidy up backend and clean up UI
+todo: 
+1. tidy up backend 
+!!!!!!!! CHORD PROGRESSIONS OPTIMIZE 
+2. incorporate Vosk
+3. make the stop button stop when counting in
 
 
 
