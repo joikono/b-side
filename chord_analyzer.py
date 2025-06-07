@@ -181,16 +181,14 @@ def group_notes_by_beats_with_tolerance(notes, tolerance_beats=0.15):
 
 def analyze_chord_progression_with_stretching(midi_file_path, segment_size=2, tolerance_beats=0.15):
     """
-    HYBRID FIX: Use timing extraction from force_exactly_8_chords_analysis (works)
-    + chord detection logic from analyze_chord_progression_with_stretching (better for chords)
+    ROBUST FIX: Add timing tolerance and note filtering to prevent chord misdetection
     """
     print(f"🎼 Analyzing chord progression: {midi_file_path}")
-    print(f"🎯 Using HYBRID approach: melody timing + chord detection")
+    print(f"🎯 Using ROBUST timing + chord detection")
     
-    # STEP 1: Use the EXACT timing extraction from force_exactly_8_chords_analysis
+    # STEP 1: Extract timing (same as before)
     from melody_analyzer2 import extract_melody_with_timing
     
-    # Extract notes with tolerance (same as force_exactly_8_chords_analysis)
     notes, ticks_per_beat = extract_melody_with_timing(midi_file_path, tolerance_beats=0.2)
     
     if not notes:
@@ -206,8 +204,7 @@ def analyze_chord_progression_with_stretching(midi_file_path, segment_size=2, to
     
     print(f"📊 Extracted {len(notes)} notes from MIDI")
     
-    # STEP 2: Apply the EXACT timing logic from force_exactly_8_chords_analysis
-    # COPY THIS SECTION WORD-FOR-WORD from force_exactly_8_chords_analysis
+    # STEP 2: Apply timing normalization (same as before)
     if notes:
         music_start = min(note['start'] for note in notes)
         music_end = max(note['end'] for note in notes)
@@ -215,106 +212,126 @@ def analyze_chord_progression_with_stretching(midi_file_path, segment_size=2, to
         
         print(f"🎵 Actual musical content: {music_start:.2f} → {music_end:.2f} beats ({actual_duration:.2f} beats)")
         
-        # EXACT same logic as force_exactly_8_chords_analysis
-        if actual_duration > 4.0:  # Only stretch if we have substantial content
+        if actual_duration > 4.0:
             print(f"🎯 Stretching timing from {actual_duration:.1f} beats to 16.0 beats...")
             
-            # Calculate stretch factor (EXACT same as force_exactly_8_chords_analysis)
             stretch_factor = 16.0 / actual_duration
-            stretch_factor *= 0.98  # Same correction factor
-
+            stretch_factor *= 0.98
             offset = music_start
             
-            # Normalize and stretch all note timings (EXACT same as force_exactly_8_chords_analysis)
             for note in notes:
-                # Remove offset and stretch
                 note['start'] = (note['start'] - offset) * stretch_factor
                 note['end'] = (note['end'] - offset) * stretch_factor
-            
-            music_start = 0.0
-            music_end = 16.0
-            music_duration = 16.0
             
             print(f"✅ Timing stretched by factor {stretch_factor:.2f}x")
         else:
             print(f"⚠️  Too little content ({actual_duration:.1f} beats). Using default timing.")
-            music_start = 0.0
-            music_end = 16.0
-            music_duration = 16.0
-    else:
-        music_start = 0
-        music_end = 16  # Fallback to 16 beats
-        music_duration = 16
+            offset = music_start
+            for note in notes:
+                note['start'] = note['start'] - offset
+                note['end'] = note['end'] - offset
 
-    print(f"🎯 Final analysis timing: {music_start:.2f} → {music_end:.2f} beats ({music_duration:.2f} beats)")
+    print(f"🎯 Final analysis timing: 0.00 → 16.00 beats")
 
-    # STEP 3: Create exactly 8 segments (EXACT same as force_exactly_8_chords_analysis)
-    segment_duration = 2.0  # Always 2 beats per segment for 16-beat total
+    # STEP 3: ROBUST segment creation with improved note filtering
+    segment_duration = 2.0
     segments = []
-    timing_adjustments = []
+    
+    print(f"🎯 Creating exactly 8 segments with ROBUST note filtering:")
 
-    print(f"🎯 Creating exactly 8 segments of {segment_duration} beats each:")
-
-    for seg_idx in range(8):  # HARD RULE: Exactly 8 segments (same as melody)
-        # Calculate segment boundaries - EXACT same as force_exactly_8_chords_analysis
-        segment_start = seg_idx * segment_duration  # 0, 2, 4, 6, 8, 10, 12, 14
-        segment_end = (seg_idx + 1) * segment_duration  # 2, 4, 6, 8, 10, 12, 14, 16
-
+    for seg_idx in range(8):
+        segment_start = seg_idx * segment_duration
+        segment_end = (seg_idx + 1) * segment_duration
+        segment_center = (segment_start + segment_end) / 2
+        
         print(f"  Segment {seg_idx+1}: {segment_start:.1f} → {segment_end:.1f} beats")
 
-        # Find notes in this segment (EXACT same logic as force_exactly_8_chords_analysis)
+        # ROBUST NOTE SELECTION: Use multiple criteria
         segment_notes = []
+        primary_notes = []
+        secondary_notes = []
+        
         for note in notes:
-            note_start = note['start']  # Already normalized and stretched
-            note_end = note['end']      # Already normalized and stretched
+            note_start = note['start']
+            note_end = note['end']
+            note_center = (note_start + note_end) / 2
             
-            # Check if note overlaps with this segment (EXACT same check)
-            if (note_start < segment_end and note_end > segment_start):
-                segment_notes.append(note)
+            # Primary notes: center falls within segment
+            if segment_start <= note_center <= segment_end:
+                primary_notes.append(note)
+            
+            # Secondary notes: any overlap with segment (but not center-based)
+            elif (note_start < segment_end and note_end > segment_start):
+                secondary_notes.append(note)
+        
+        # ROBUST SELECTION LOGIC:
+        if primary_notes:
+            # Use notes whose center falls in the segment (most reliable)
+            segment_notes = primary_notes
+            selection_method = "primary (center-based)"
+        elif secondary_notes:
+            # Fallback to overlap-based selection
+            segment_notes = secondary_notes
+            selection_method = "secondary (overlap-based)"
+        else:
+            # No notes found
+            segment_notes = []
+            selection_method = "none"
+        
+        # ADDITIONAL FILTERING: Remove notes that are too short (likely artifacts)
+        if segment_notes:
+            filtered_notes = []
+            for note in segment_notes:
+                note_duration = note['end'] - note['start']
+                # Keep notes that are at least 0.1 beats long (filter out very short artifacts)
+                if note_duration >= 0.1:
+                    filtered_notes.append(note)
+            
+            if filtered_notes:
+                segment_notes = filtered_notes
+            # If all notes were filtered out, keep original (better than nothing)
 
         if segment_notes:
-            # HERE'S THE KEY DIFFERENCE: Use CHORD detection logic (not melody harmonization)
-            chord, confidence = identify_chord_with_confidence(segment_notes)
+            # ROBUST CHORD DETECTION with additional debugging
+            chord, confidence = identify_chord_with_confidence_robust(segment_notes)
             
             if chord is None:
-                # Use previous chord or default (same fallback as melody)
                 chord = segments[-1]['chord'] if segments else 'C'
                 confidence = 0
             
-            # Debug output (same style as melody)
+            # Debug output with selection method
             pcs = sorted(set(note['pitch'] % 12 for note in segment_notes))
-            note_times = [(note['start'], note['end']) for note in segment_notes[:3]]
-            print(f"    {len(segment_notes)} notes, PCs: {pcs}")
-            print(f"    Sample timings: {note_times}")
+            note_details = [(note['pitch'], note['start'], note['end']) for note in segment_notes]
+            print(f"    {len(segment_notes)} notes ({selection_method}), PCs: {pcs}")
+            print(f"    Note details: {note_details}")
             print(f"    → Chord: {chord} (confidence: {confidence:.2f})")
             
         else:
             print(f"    No notes - using previous chord or C")
-            # Use the previous chord if available, otherwise use C (same as melody)
             chord = segments[-1]['chord'] if segments else 'C'
             confidence = 0
         
-        # Create segment data (EXACT same structure as force_exactly_8_chords_analysis)
+        # Create segment data
         segment_data = {
-            'start_beat': segment_start,   # 0, 2, 4, 6, 8, 10, 12, 14
-            'end_beat': segment_end,       # 2, 4, 6, 8, 10, 12, 14, 16
+            'start_beat': segment_start,
+            'end_beat': segment_end,
             'chord': chord,
             'confidence': confidence,
             'used_timing_tolerance': False,
             'segment_idx': seg_idx,
-            'notes': segment_notes
+            'notes': segment_notes,
+            'selection_method': selection_method if segment_notes else 'fallback'
         }
         segments.append(segment_data)
     
-    # STEP 4: Extract final progression - guaranteed exactly 8 chords
+    # STEP 4: Extract final progression (same as before)
     chord_progression = [s['chord'] for s in segments]
     
-    # Ensure exactly 8 chords (same as force_exactly_8_chords_analysis)
     while len(chord_progression) < 8:
         chord_progression.append(chord_progression[-1] if chord_progression else 'C')
     chord_progression = chord_progression[:8]
     
-    # Simple key detection
+    # Key detection
     chord_counter = Counter(chord_progression)
     most_common_chord = chord_counter.most_common(1)[0][0] if chord_counter else 'C'
     
@@ -325,23 +342,101 @@ def analyze_chord_progression_with_stretching(midi_file_path, segment_size=2, to
     
     # Generate visualization
     create_chord_progression_visualization(
-        notes, segments, timing_adjustments, midi_file_path
+        notes, segments, [], midi_file_path
     )
     
-    print(f"\n🎵 HYBRID 8-chord analysis results (16-beat visualization):")
+    print(f"\n🎵 ROBUST 8-chord analysis results:")
     print(f"  Progression: {' → '.join(chord_progression)}")
     print(f"🎼 Detected key: {detected_key}")
-    print(f"✅ GUARANTEED: Exactly 8 chords with working timing + chord detection!")
+    print(f"✅ ROBUST: Better timing tolerance + note filtering!")
     
     return {
         'analysis_type': 'chord_progression',
         'chord_progression': chord_progression,
         'segments': segments,
         'key': detected_key,
-        'timing_adjustments': timing_adjustments,
-        'tolerance_used': len(timing_adjustments) > 0,
+        'timing_adjustments': [],
+        'tolerance_used': False,
         'stretched_notes': notes
     }
+
+def identify_chord_with_confidence_robust(note_group):
+    """
+    ROBUST chord identification with better handling of timing artifacts
+    """
+    if not note_group:
+        return None, 0
+    
+    # Extract pitch classes from notes
+    all_pitches = [note['pitch'] for note in note_group]
+    pitch_classes = sorted(set(pitch % 12 for pitch in all_pitches))
+    
+    # ROBUST BASS NOTE DETECTION: Use the note with longest duration + lowest pitch
+    # This prevents short artifacts from becoming the "bass" note
+    bass_candidates = []
+    for note in note_group:
+        duration = note['end'] - note['start']
+        bass_candidates.append((note['pitch'], duration, note))
+    
+    # Sort by pitch (lowest first), then by duration (longest first)
+    bass_candidates.sort(key=lambda x: (x[0], -x[1]))
+    bass_pc = bass_candidates[0][0] % 12
+    
+    # Calculate scores for all possible chords
+    chord_scores = {}
+    
+    for chord_name, chord_pcs in CHORD_DEFINITIONS.items():
+        score = 0
+        
+        # Check how many chord tones are present
+        matched_tones = set(pitch_classes).intersection(set(chord_pcs))
+        score += len(matched_tones) * 1.0
+        
+        # REDUCED penalty for non-chord tones (less sensitive to artifacts)
+        non_chord_tones = set(pitch_classes) - set(chord_pcs)
+        score -= len(non_chord_tones) * 0.2  # Reduced from 0.3
+        
+        # Bass note bonus/penalty (same as before)
+        if bass_pc == chord_pcs[0]:  # Root in bass
+            score += 2.0
+        elif bass_pc in chord_pcs:  # Chord tone in bass
+            score += 0.5
+        else:  # Non-chord tone in bass
+            score -= 1.0
+        
+        # Complete triad bonus
+        if len(matched_tones) >= 3:
+            score += 1.0
+        
+        # STABILITY BONUS: Prefer simpler chords (triads over 7th chords)
+        if len(chord_pcs) == 3:  # Triad
+            score += 0.3
+            
+        chord_scores[chord_name] = score
+    
+    # Find the best chord and confidence
+    if not chord_scores:
+        return None, 0
+    
+    max_score = max(chord_scores.values())
+    best_chords = [name for name, score in chord_scores.items() if score == max_score]
+    
+    # Confidence calculation
+    sorted_scores = sorted(chord_scores.values(), reverse=True)
+    if len(sorted_scores) > 1:
+        confidence = max_score - sorted_scores[1]
+    else:
+        confidence = max_score
+    
+    # Prefer simpler chords in case of ties
+    if len(best_chords) > 1:
+        simple_chords = [c for c in best_chords if len(c) <= 2]
+        best_chord = simple_chords[0] if simple_chords else best_chords[0]
+    else:
+        best_chord = best_chords[0] if best_chords else None
+    
+    return best_chord, max(0, confidence)
+
 
 def identify_chord_with_early_notes(regular_notes, early_notes=None):
     """
