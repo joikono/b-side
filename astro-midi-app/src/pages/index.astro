@@ -2326,6 +2326,11 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 console.log("🔇 Speaking mode ON - commands blocked");
 
                 const utterance = new SpeechSynthesisUtterance(text);
+
+                utterance.voice = speechSynthesis
+                    .getVoices()
+                    .find((voice) => voice.name.includes("Mark"));
+
                 utterance.rate = 0.9;
                 utterance.volume = 0.7;
 
@@ -3509,9 +3514,13 @@ import CircularWaveform from "../components/circular_waveform.astro";
             });
         }
 
-        // 🎤 ADD THIS: Initialize voice commands
+        // Add this right after voiceCommands initialization:
         setTimeout(() => {
             voiceCommands = new VoiceCommands();
+
+            // 🎭 LOAD VOICES EARLY:
+            speechSynthesis.getVoices(); // Trigger voice loading
+
             voiceCommands.startListening();
             console.log(
                 '🎤 Voice commands initialized - say "Hey Wave" to activate',
