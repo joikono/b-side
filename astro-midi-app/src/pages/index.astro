@@ -1077,7 +1077,9 @@ import CircularWaveform from "../components/circular_waveform.astro";
     // Arrangement controls functionality
     let isArrangementMenuOpen = false;
 
-    // Add these to your existing script section
+    // voice commands
+    let voiceCommands = null;
+
     function autoConnect() {
         const deviceSelect = document.getElementById("deviceSelect");
         if (deviceSelect.value) {
@@ -2134,6 +2136,235 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }
     }
 
+    class VoiceCommands {
+        constructor() {
+            this.recognition = null;
+            this.isListening = false;
+            this.isWakeWordMode = true;
+            this.activeSession = false;
+            this.sessionTimeout = null;
+            this.isSpeaking = false; // 🆕 NEW: Flag to track when we're speaking
+            this.setupSpeechRecognition();
+        }
+
+        setupSpeechRecognition() {
+            if (
+                "webkitSpeechRecognition" in window ||
+                "SpeechRecognition" in window
+            ) {
+                const SpeechRecognition =
+                    window.SpeechRecognition || window.webkitSpeechRecognition;
+                this.recognition = new SpeechRecognition();
+                this.recognition.continuous = true; // Keep listening
+                this.recognition.interimResults = false;
+                this.recognition.lang = "en-US";
+
+                this.recognition.onresult = (event) => {
+                    const command =
+                        event.results[
+                            event.results.length - 1
+                        ][0].transcript.toLowerCase();
+                    console.log("🎤 Heard:", command);
+                    this.processCommand(command);
+                };
+
+                this.recognition.onend = () => {
+                    // Restart if we're still supposed to be listening
+                    if (this.isListening) {
+                        setTimeout(() => this.recognition.start(), 100);
+                    }
+                };
+
+                this.recognition.onerror = (event) => {
+                    console.log("🎤 Speech error:", event.error);
+                    // Restart after errors (except permission denied)
+                    if (event.error !== "not-allowed" && this.isListening) {
+                        setTimeout(() => this.recognition.start(), 1000);
+                    }
+                };
+            }
+        }
+
+        processCommand(command) {
+            // 🛡️ IGNORE commands while we're speaking
+            if (this.isSpeaking) {
+                console.log("🔇 Ignoring command - system is speaking");
+                return;
+            }
+
+            if (this.isWakeWordMode && !this.activeSession) {
+                // Wake word detection
+                if (command.includes("hey wave") || command.includes("hey")) {
+                    console.log("👋 Wake word detected!");
+
+                    const responses = [
+                        "What's up?",
+                        "Yeah?",
+                        "I'm listening",
+                        "Go ahead",
+                        "What can I do?",
+                        "I'm here",
+                        "Yes?",
+                        "Ready!",
+                        "What's on your mind?",
+                        "How can I help?",
+                    ];
+
+                    const randomResponse =
+                        responses[Math.floor(Math.random() * responses.length)];
+                    this.speak(randomResponse);
+
+                    this.isWakeWordMode = false;
+                    this.startActiveSession();
+                    return;
+                }
+            } else {
+                // Command mode - execute actual commands
+                if (command.includes("record")) {
+                    console.log("▶️ Starting recording...");
+                    this.speak("Starting recording");
+                    startCapture();
+                    this.extendActiveSession();
+                } else if (command.includes("cancel recording")) {
+                    console.log("⏹️ Cancelling recording...");
+                    this.speak("Cancelling recording");
+                    stopCapture();
+                    this.extendActiveSession();
+                } else if (command.includes("play")) {
+                    console.log("🎵 Playing...");
+                    const playResponses = [
+                        "Playing arrangement",
+                        "Here we go!",
+                        "Let's hear it",
+                        "Starting playback",
+                        "Playing now",
+                    ];
+                    const randomPlay =
+                        playResponses[
+                            Math.floor(Math.random() * playResponses.length)
+                        ];
+                    this.speak(randomPlay);
+                    playStickyMidi();
+                    this.extendActiveSession();
+                } else if (command.includes("stop")) {
+                    console.log("⏹️ Stopping playback...");
+                    const stopResponses = [
+                        "Stopping playback",
+                        "All stopped",
+                        "Paused",
+                        "Stopping now",
+                        "Done",
+                    ];
+                    const randomStop =
+                        stopResponses[
+                            Math.floor(Math.random() * stopResponses.length)
+                        ];
+                    this.speak(randomStop);
+                    stopStickyMidi();
+                    this.extendActiveSession();
+                } else if (command.includes("generate")) {
+                    console.log("🎼 Generating...");
+                    this.speak("Generating arrangement");
+                    analyzeAndGenerate();
+                    this.extendActiveSession();
+                } else if (command.includes("loop")) {
+                    console.log("Looping...");
+                    this.speak("Looping arrangement");
+                    toggleStickyMidiLoop();
+                    this.extendActiveSession();
+                }
+            }
+        }
+
+        // 🆕 NEW: Start active session (stays awake for commands)
+        startActiveSession() {
+            this.activeSession = true;
+            this.isWakeWordMode = false;
+            console.log("🔥 Active session started - no wake word needed");
+
+            // Set timeout to end session after 30 seconds of inactivity
+            this.sessionTimeout = setTimeout(() => {
+                this.endActiveSession();
+            }, 30000); // 30 seconds
+        }
+
+        // 🆕 NEW: Extend active session (reset the timeout)
+        extendActiveSession() {
+            if (this.activeSession) {
+                // Clear existing timeout
+                if (this.sessionTimeout) {
+                    clearTimeout(this.sessionTimeout);
+                }
+
+                // Set new timeout
+                this.sessionTimeout = setTimeout(() => {
+                    this.endActiveSession();
+                }, 30000); // Another 30 seconds
+
+                console.log("⏰ Active session extended - 30 more seconds");
+            }
+        }
+
+        // 🆕 NEW: End active session (back to wake word mode)
+        endActiveSession() {
+            this.activeSession = false;
+            this.isWakeWordMode = true;
+
+            if (this.sessionTimeout) {
+                clearTimeout(this.sessionTimeout);
+                this.sessionTimeout = null;
+            }
+
+            console.log("😴 Session ended - say 'Hey Wave' to start again");
+            this.speak("Session ended"); // Optional: notify user
+        }
+
+        // 🆕 NEW: Simple flag-based speak method
+        speak(text) {
+            if ("speechSynthesis" in window) {
+                this.isSpeaking = true; // 🚫 Block commands while speaking
+                console.log("🔇 Speaking mode ON - commands blocked");
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.9;
+                utterance.volume = 0.7;
+
+                utterance.onend = () => {
+                    // Add delay before allowing commands again
+                    setTimeout(() => {
+                        this.isSpeaking = false; // ✅ Allow commands again
+                        console.log("🎤 Speaking mode OFF - commands enabled");
+                    }, 1000); // 1 second buffer
+                };
+
+                utterance.onerror = () => {
+                    setTimeout(() => {
+                        this.isSpeaking = false;
+                        console.log("🎤 Speaking mode OFF after error");
+                    }, 1000);
+                };
+
+                speechSynthesis.speak(utterance);
+                console.log("🗣️ Speaking:", text);
+            }
+        }
+
+        startListening() {
+            if (this.recognition) {
+                this.isListening = true;
+                this.recognition.start();
+                console.log('👂 Always listening for "Hey Wave"...');
+            }
+        }
+
+        stopListening() {
+            this.isListening = false;
+            if (this.recognition) {
+                this.recognition.stop();
+            }
+        }
+    }
+
     // Initialize objects
     metronome = new Metronome();
     pianoSynth = new PianoSynth();
@@ -3106,6 +3337,19 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }
     }
 
+    function playStickyMidi() {
+        const player = document.getElementById("stickyArrangementPlayer");
+        if (player && player.src) {
+            player.start(); // html-midi-player uses .start() method
+            console.log("🎵 Started playing arrangement");
+        } else {
+            console.log("❌ No arrangement loaded to play");
+            if (voiceCommands) {
+                voiceCommands.speak("No arrangement available to play");
+            }
+        }
+    }
+
     function stopStickyMidi() {
         const player = document.getElementById("stickyArrangementPlayer");
         if (player) {
@@ -3264,6 +3508,15 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 pianoSynth.setSoundType(e.target.value);
             });
         }
+
+        // 🎤 ADD THIS: Initialize voice commands
+        setTimeout(() => {
+            voiceCommands = new VoiceCommands();
+            voiceCommands.startListening();
+            console.log(
+                '🎤 Voice commands initialized - say "Hey Wave" to activate',
+            );
+        }, 2000);
 
         // At the end of your existing DOMContentLoaded function, add:
         setTimeout(() => {
