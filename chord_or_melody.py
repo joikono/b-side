@@ -45,7 +45,6 @@ def detect_midi_type_with_stretching_and_viz(midi_file, output_dir="generated_vi
         )
         
         print(f"🎵 Classification: {analysis_result['classification']}")
-        print(f"📊 Visualization saved: {viz_filename}")
         
         return analysis_result['classification'], viz_filename
         

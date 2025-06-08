@@ -1,5 +1,4 @@
 # main.py - Streamlined FastAPI Backend with FORCED 8-CHORD Analysis
-# Fixed: Always returns exactly 8 chords for frontend MIDI uploads
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +17,7 @@ import numpy as np
 # Import your existing modules
 from model_manager import MagentaModelManager
 from chord_analyzer import analyze_chord_progression_with_stretching
-from melody_analyzer2 import analyze_midi_melody, create_four_way_visualization
+from melody_analyzer2 import create_four_way_visualization, force_exactly_8_chords_analysis, create_track_visualization
 from chord_or_melody import detect_midi_type
 from arrangement_generator import generate_arrangement_from_chords
 from chord_or_melody import detect_midi_type_with_stretching_and_viz
@@ -58,387 +57,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-def force_exactly_8_chords_analysis(midi_path):
-    """
-    HARD RULE: Always return exactly 8 chords.
-    Divide the melody into exactly 8 equal segments and analyze each.
-    FIXED: Ensure proper 16-beat duration for visualization.
-    """
-    from melody_analyzer2 import extract_melody_with_timing, detect_key_from_melody
-    from melody_analyzer2 import suggest_chord_simple_style, suggest_chord_folk_style
-    from melody_analyzer2 import get_scale_degrees_in_key
-
-    print("🎯 FORCE EXACTLY 8 CHORDS - Frontend Upload Mode")
-
-    # Extract notes with tolerance
-    notes, ticks_per_beat = extract_melody_with_timing(midi_path, tolerance_beats=0.2)
-
-    if not notes:
-        print("❌ No notes found - using default progression")
-        return "C", (['C'] * 8, ['C'] * 8, ['C'] * 8, ['C'] * 8), (50.0, 50.0, 85.0, 80.0), []
-
-    # Detect key
-    key, key_confidence = detect_key_from_melody(notes)
-    print(f"🎼 Detected Key: {key} (confidence: {key_confidence:.3f})")
-
-    if not key:
-        key = "C"  # Fallback
-
-    scale_degrees = get_scale_degrees_in_key(key)
-
-    # Find the actual start and end of musical content
-    if notes:
-        music_start = min(note['start'] for note in notes)
-        music_end = max(note['end'] for note in notes)
-        actual_duration = music_end - music_start
-        
-        print(f"🎵 Actual musical content: {music_start:.2f} → {music_end:.2f} beats ({actual_duration:.2f} beats)")
-        
-        # IMPROVED: Always normalize timing to 16 beats for consistent analysis
-        if actual_duration > 4.0:  # Only stretch if we have substantial content
-            print(f"🎯 Stretching timing from {actual_duration:.1f} beats to 16.0 beats...")
-            
-            # Calculate stretch factor
-            stretch_factor = 16.0 / actual_duration
-            stretch_factor *= 0.98  # Try values between 0.95-0.99
-
-            offset = music_start
-            
-            # Normalize and stretch all note timings
-            for note in notes:
-                # Remove offset and stretch
-                note['start'] = (note['start'] - offset) * stretch_factor
-                note['end'] = (note['end'] - offset) * stretch_factor
-            
-            music_start = 0.0
-            music_end = 16.0
-            music_duration = 16.0
-            
-            print(f"✅ Timing stretched by factor {stretch_factor:.2f}x")
-        else:
-            print(f"⚠️  Too little content ({actual_duration:.1f} beats). Using default timing.")
-            music_start = 0.0
-            music_end = 16.0
-            music_duration = 16.0
-    else:
-        music_start = 0
-        music_end = 16  # Fallback to 16 beats
-        music_duration = 16
-
-    print(f"🎯 Final analysis timing: {music_start:.2f} → {music_end:.2f} beats ({music_duration:.2f} beats)")
-
-    # Force exactly 8 segments of exactly 2 beats each
-    segment_duration = 2.0  # Always 2 beats per segment for 16-beat total
-
-    simple_progression = []
-    folk_progression = []
-    all_segments = []
-
-    print(f"🎯 Creating exactly 8 segments of {segment_duration} beats each:")
-
-    for seg_idx in range(8):  # HARD RULE: Exactly 8 segments
-        # Calculate segment boundaries - FIXED to ensure 16-beat span
-        segment_start = seg_idx * segment_duration  # 0, 2, 4, 6, 8, 10, 12, 14
-        segment_end = (seg_idx + 1) * segment_duration  # 2, 4, 6, 8, 10, 12, 14, 16
-
-        print(f"  Segment {seg_idx+1}: {segment_start:.1f} → {segment_end:.1f} beats")
-
-        # Find notes in this segment (using properly stretched timing)
-        segment_notes = []
-        for note in notes:
-            note_start = note['start']  # Already normalized and stretched
-            note_end = note['end']      # Already normalized and stretched
-            
-            # Check if note overlaps with this segment
-            if (note_start < segment_end and note_end > segment_start):
-                segment_notes.append(note)
-
-        if segment_notes:
-            # Analyze this segment
-            simple_chord, simple_conf = suggest_chord_simple_style(segment_notes, key, scale_degrees)
-            folk_chord, folk_conf = suggest_chord_folk_style(segment_notes, key, scale_degrees)
-
-            simple_progression.append(simple_chord or 'C')
-            folk_progression.append(folk_chord or 'C')
-
-            # Debug output with note timing info
-            pcs = sorted(set(note['pitch_class'] for note in segment_notes))
-            note_times = [(note['start'], note['end']) for note in segment_notes[:3]]  # Show first 3 notes
-            print(f"    {len(segment_notes)} notes, PCs: {pcs}")
-            print(f"    Sample timings: {note_times}")
-            print(f"    → Simple: {simple_chord or 'C'}, Folk: {folk_chord or 'C'}")
-        else:
-            print(f"    No notes - using previous chord or C")
-            # Use the previous chord if available, otherwise use C
-            prev_chord = simple_progression[-1] if simple_progression else 'C'
-            simple_progression.append(prev_chord)
-            folk_progression.append(prev_chord)
-
-        # Create segment data with FIXED timing for visualization
-        segment_data = {
-            'start_beat': segment_start,   # 0, 2, 4, 6, 8, 10, 12, 14
-            'end_beat': segment_end,       # 2, 4, 6, 8, 10, 12, 14, 16
-            'simple': {'chord': simple_progression[-1], 'confidence': 75.0},
-            'folk': {'chord': folk_progression[-1], 'confidence': 75.0},
-            'notes': segment_notes
-        }
-        all_segments.append(segment_data)
-
-    # Create foundation progressions (simple patterns for 8 chords)
-    bass_progression = [key] * 4 + ['F'] * 2 + ['G'] * 2  # Key-F-F-G-G pattern
-    phrase_progression = [key] * 4 + ['Am'] * 4 if not key.endswith('m') else [key] * 8
-
-    # Calculate confidence scores
-    simple_conf = 75.0
-    folk_conf = 75.0
-    bass_conf = 85.0
-    phrase_conf = 80.0
-
-    print(f"\n🎵 FORCED 8-chord analysis results (16-beat visualization):")
-    print(f"  Simple: {' → '.join(simple_progression)}")
-    print(f"  Folk: {' → '.join(folk_progression)}")
-    print(f"  Bass: {' → '.join(bass_progression)}")
-    print(f"  Phrase: {' → '.join(phrase_progression)}")
-    print(f"✅ GUARANTEED: Exactly 8 chords spanning 16 beats!")
-
-    return key, (simple_progression, folk_progression, bass_progression, phrase_progression), (simple_conf, folk_conf, bass_conf, phrase_conf), all_segments, notes  # Return notes too!
-
-def create_track_visualization(midi_file, segments, bass_progression, phrase_progression, key, notes, output_file):
-    """
-    Create visualization showing all four harmonization options.
-    FIXED: Proper 16-beat timing and text positioning.
-    """
-    import matplotlib.pyplot as plt
-    
-    # Create output directory
-    output_dir = "generated_visualizations"
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Get just the filename without path and extension for the title
-    midi_filename = os.path.splitext(os.path.basename(midi_file))[0]
-    
-    # Update output file path to include directory
-    full_output_path = os.path.join(output_dir, output_file)
-    
-    # Debug: Check note timings
-    if notes:
-        note_timings = [(note.get('start', 0), note.get('end', 0)) for note in notes[:5]]
-        print(f"🔍 Visualization note timings (first 5): {note_timings}")
-    
-    plt.figure(figsize=(16, 12))
-    
-    # FIXED: Always use 16 beats for proper timing
-    max_time = 16.0
-    
-    # Plot melody
-    plt.subplot(5, 1, 1)
-    if notes:
-        for note in notes:
-            # Use the properly stretched timing
-            note_start = note.get('start', 0)
-            note_end = note.get('end', note_start + 0.5)
-            note_pitch = note.get('pitch', 60)
-            
-            # Ensure notes are within 16-beat range
-            if note_start < max_time and note_end > 0:
-                plt.plot([note_start, note_end], [note_pitch, note_pitch], 
-                        linewidth=3, alpha=0.7)
-                
-                # Add emphasis dots for important notes
-                plt.plot(note_start, note_pitch, 'ro', markersize=4, alpha=0.8)
-    
-    plt.ylabel('MIDI Pitch')
-    plt.title(f'Melody Analysis - {midi_filename} - Key: {key}')
-    plt.xlim(0, max_time)
-    if notes:
-        all_pitches = [note.get('pitch', 60) for note in notes]
-        if all_pitches:
-            plt.ylim(min(all_pitches) - 2, max(all_pitches) + 2)
-    plt.grid(True, alpha=0.3)
-    
-    # Plot Simple/Pop harmonization
-    plt.subplot(5, 1, 2)
-    for seg in segments:
-        if seg.get('simple', {}).get('chord'):
-            width = seg['end_beat'] - seg['start_beat']
-            plt.barh(0, width, left=seg['start_beat'], height=0.5, 
-                    color='green', alpha=0.6)
-            plt.text(seg['start_beat'] + width/2, 0, 
-                    seg['simple']['chord'], 
-                    ha='center', va='center', fontweight='bold', color='white')
-    
-    plt.xlim(0, max_time)
-    plt.ylim(-0.5, 0.5)
-    plt.ylabel('Simple/Pop')
-    plt.yticks([])
-    plt.grid(True, alpha=0.3)
-    
-    # Plot Folk/Acoustic harmonization
-    plt.subplot(5, 1, 3)
-    for seg in segments:
-        if seg.get('folk', {}).get('chord'):
-            width = seg['end_beat'] - seg['start_beat']
-            plt.barh(0, width, left=seg['start_beat'], height=0.5, 
-                    color='blue', alpha=0.6)
-            plt.text(seg['start_beat'] + width/2, 0, 
-                    seg['folk']['chord'], 
-                    ha='center', va='center', fontweight='bold', color='white')
-    
-    plt.xlim(0, max_time)
-    plt.ylim(-0.5, 0.5)
-    plt.ylabel('Folk/Acoustic')
-    plt.yticks([])
-    plt.grid(True, alpha=0.3)
-    
-    # Plot Bass Foundation - FIXED text positioning
-    plt.subplot(5, 1, 4)
-    for j, bass_note in enumerate(bass_progression):
-        if bass_note:
-            # Each segment is 2 beats wide (16 beats ÷ 8 segments = 2 beats each)
-            segment_width = 2.0
-            segment_start = j * segment_width
-            
-            plt.barh(0, segment_width, left=segment_start, height=0.5, 
-                    color='purple', alpha=0.6)
-            # FIXED: Center text properly in each segment
-            plt.text(segment_start + segment_width/2, 0, bass_note, 
-                    ha='center', va='center', fontweight='bold', color='white')
-    
-    plt.xlim(0, max_time)
-    plt.ylim(-0.5, 0.5)
-    plt.ylabel('Bass Foundation')
-    plt.yticks([])
-    plt.grid(True, alpha=0.3)
-    
-    # Plot Phrase Foundation - FIXED text positioning
-    plt.subplot(5, 1, 5)
-    for j, phrase_note in enumerate(phrase_progression):
-        if phrase_note:
-            # Each segment is 2 beats wide
-            segment_width = 2.0
-            segment_start = j * segment_width
-            
-            plt.barh(0, segment_width, left=segment_start, height=0.5, 
-                    color='orange', alpha=0.6)
-            # FIXED: Center text properly in each segment
-            plt.text(segment_start + segment_width/2, 0, phrase_note, 
-                    ha='center', va='center', fontweight='bold', color='white')
-    
-    plt.xlim(0, max_time)
-    plt.ylim(-0.5, 0.5)
-    plt.ylabel('Phrase Foundation')
-    plt.yticks([])
-    plt.grid(True, alpha=0.3)
-    
-    plt.xlabel('Time (beats)')
-    plt.tight_layout()
-    plt.savefig(full_output_path, dpi=150, bbox_inches='tight')
-    plt.close()
-    print(f"🎨 Fixed visualization saved as '{full_output_path}'")
-
-def create_chord_progression_visualization(chord_progression, key, style_name, output_file):
-    """Create a visualization of the chord progression and save it."""
-    try:
-        plt.style.use('default')
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8))
-        
-        # Color scheme for different chord types
-        chord_colors = {
-            'major': '#3498db',      # Blue
-            'minor': '#e74c3c',      # Red  
-            'dominant': '#f39c12',   # Orange
-            'diminished': '#9b59b6', # Purple
-            'other': '#95a5a6'       # Gray
-        }
-        
-        def get_chord_type(chord):
-            if chord == 'N':
-                return 'other'
-            elif 'm' in chord and '7' not in chord:
-                return 'minor'
-            elif '7' in chord:
-                return 'dominant'
-            elif any(dim in chord.lower() for dim in ['dim', 'o']):
-                return 'diminished'
-            else:
-                return 'major'
-        
-        # Top plot: Chord progression timeline
-        ax1.set_title(f'Chord Progression Analysis - {style_name} Style\nKey: {key}', 
-                     fontsize=16, fontweight='bold', pad=20)
-        
-        # Create chord blocks
-        for i, chord in enumerate(chord_progression):
-            chord_type = get_chord_type(chord)
-            color = chord_colors[chord_type]
-            
-            # Draw chord block
-            rect = patches.Rectangle((i, 0), 0.8, 1, 
-                                   linewidth=2, edgecolor='black', 
-                                   facecolor=color, alpha=0.7)
-            ax1.add_patch(rect)
-            
-            # Add chord label
-            ax1.text(i + 0.4, 0.5, chord, 
-                    ha='center', va='center', 
-                    fontsize=14, fontweight='bold', color='white')
-        
-        ax1.set_xlim(-0.5, len(chord_progression) - 0.5)
-        ax1.set_ylim(-0.1, 1.1)
-        ax1.set_xlabel('Chord Position (2-beat segments)', fontsize=12)
-        ax1.set_ylabel('Chord', fontsize=12)
-        ax1.set_xticks(range(len(chord_progression)))
-        ax1.set_xticklabels([f'{i+1}' for i in range(len(chord_progression))])
-        ax1.set_yticks([])
-        ax1.grid(True, axis='x', alpha=0.3)
-        
-        # Bottom plot: Chord type distribution
-        chord_types = [get_chord_type(chord) for chord in chord_progression]
-        type_counts = {chord_type: chord_types.count(chord_type) for chord_type in chord_colors.keys()}
-        type_counts = {k: v for k, v in type_counts.items() if v > 0}
-        
-        if type_counts:
-            colors = [chord_colors[chord_type] for chord_type in type_counts.keys()]
-            bars = ax2.bar(type_counts.keys(), type_counts.values(), color=colors, alpha=0.7)
-            
-            # Add value labels on bars
-            for bar in bars:
-                height = bar.get_height()
-                ax2.text(bar.get_x() + bar.get_width()/2., height + 0.05,
-                        f'{int(height)}', ha='center', va='bottom', fontweight='bold')
-        
-        ax2.set_title('Chord Type Distribution', fontsize=14, fontweight='bold')
-        ax2.set_ylabel('Count', fontsize=12)
-        ax2.set_xlabel('Chord Types', fontsize=12)
-        ax2.grid(True, axis='y', alpha=0.3)
-        
-        # Add legend
-        legend_elements = [patches.Patch(facecolor=color, edgecolor='black', label=chord_type.title()) 
-                          for chord_type, color in chord_colors.items() if chord_type in type_counts]
-        ax2.legend(handles=legend_elements, loc='upper right')
-        
-        # Add analysis info
-        info_text = f"""Analysis Summary:
-• Total Chords: {len(chord_progression)}
-• Key: {key}
-• Style: {style_name}
-• Progression: {' → '.join(chord_progression)}"""
-        
-        plt.figtext(0.02, 0.02, info_text, fontsize=10, 
-                   bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.8))
-        
-        plt.tight_layout()
-        plt.subplots_adjust(bottom=0.15)
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        print(f"Chord progression visualization saved to: {output_file}")
-        return True
-        
-    except Exception as e:
-        print(f"Error creating visualization: {e}")
-        return False
 
 @app.on_event("startup")
 async def load_models():
@@ -576,19 +194,20 @@ async def analyze_melody(
             temp_path, 
             output_dir="generated_visualizations"
         )
-        
-        print(f"🔍 DETECTED TYPE: {detected_type.upper()}")
-        if chord_melody_viz_file:
-            print(f"📊 Chord/Melody analysis visualization: {chord_melody_viz_file}")
-        
+                
         print("\n" + "=" * 80)
-        print(f"🎵 STEP 2: BRANCHING TO {detected_type.upper()} ANALYSIS PATH")
+        print(f"🎵 STEP 2: {detected_type.upper()} ANALYSIS + VISUALIZATION")
         print("=" * 80)
+        
+        # Initialize visualization variables
+        timestamp = int(time.time())
+        base_name = os.path.splitext(file.filename)[0]
+        viz_success = False
+        viz_filename = None
         
         # BRANCHING LOGIC: Different analysis based on detection
         if detected_type == "chord_progression":
-                        
-            # Analyze as chord progression with stretching
+            # Analyze as chord progression with stretching (includes visualization)
             result = analyze_chord_progression_with_stretching(
                 temp_path,
                 segment_size=segment_size,
@@ -598,9 +217,14 @@ async def analyze_melody(
             print(f"✅ Chord progression analysis complete!")
             print(f"   Detected progression: {' → '.join(result['chord_progression'])}")
             
-        else:  # detected_type == "melody" or "unknown"
+            # Extract visualization info from chord analysis result
+            viz_filename = result.get('visualization_file')
+            viz_success = viz_filename is not None
+            if viz_success:
+                print(f"✅ Chord progression visualization: {viz_filename}")
             
-            # Use forced 8-chord analysis for melody (existing path)
+        else:  # detected_type == "melody" or "unknown"
+            # Use forced 8-chord analysis for melody + generate visualization
             key, progressions, confidences, segments, processed_notes = force_exactly_8_chords_analysis(temp_path)
 
             simple_prog, folk_prog, bass_prog, phrase_prog = progressions
@@ -612,6 +236,27 @@ async def analyze_melody(
             print(f"  Folk: {' → '.join(folk_prog)}")
             print(f"  Bass: {' → '.join(bass_prog)}")
             print(f"  Phrase: {' → '.join(phrase_prog)}")
+            
+            # Generate melody harmonization visualization
+            viz_filename = f"{base_name}_analysis_{timestamp}.png"
+            
+            try:
+                print(f"📊 Generating melody visualization...")
+                
+                create_track_visualization(
+                    temp_path,
+                    segments,
+                    bass_prog,
+                    phrase_prog,
+                    key,
+                    processed_notes,
+                    viz_filename
+                )
+                viz_success = True
+                print(f"✅ Melody visualization successful!")
+            except Exception as e:
+                print(f"❌ Track visualization failed: {e}")
+                viz_success = False
             
             # Package melody results in same format as chord results
             result = {
@@ -626,55 +271,9 @@ async def analyze_melody(
                 },
                 'segments': segments,
                 'processed_notes': processed_notes,
-                'forced_8_chords': True
+                'forced_8_chords': True,
+                'visualization_file': viz_filename if viz_success else None
             }
-
-        print("\n" + "=" * 80)
-        print("🎵 STEP 3: GENERATING VISUALIZATION")
-        print("=" * 80)
-        
-        # Generate appropriate visualization based on analysis type
-        timestamp = int(time.time())
-        base_name = os.path.splitext(file.filename)[0]
-        
-        viz_success = False
-        viz_filename = None
-        
-        if detected_type == "chord_progression":
-            # Generate chord progression visualization
-            viz_filename = f"{base_name}_chord_analysis_{timestamp}.png"
-            
-            try:
-                # Use the chord analyzer's visualization
-                print(f"📊 Generating chord progression visualization...")
-                result['visualization_file'] = viz_filename
-                viz_success = True
-                print(f"✅ Chord progression visualization: {viz_filename}")
-            except Exception as e:
-                print(f"❌ Chord visualization failed: {e}")
-                viz_success = False
-        
-        else:
-            # Generate four-way melody harmonization visualization
-            viz_filename = f"{base_name}_melody_analysis_{timestamp}.png"
-            
-            try:
-                print(f"📊 Generating four-way melody visualization...")
-                
-                create_track_visualization(
-                    temp_path,
-                    result['segments'],
-                    result['harmonizations']['bass_foundation']['progression'],
-                    result['harmonizations']['phrase_foundation']['progression'],
-                    result['key'],
-                    result['processed_notes'],
-                    viz_filename
-                )
-                viz_success = True
-                print(f"✅ Track visualization: {viz_filename}")
-            except Exception as e:
-                print(f"❌ Track visualization failed: {e}")
-                viz_success = False
 
         print("\n" + "=" * 80)
         print("🎵 ANALYSIS COMPLETE - RETURNING RESULTS")
@@ -698,7 +297,7 @@ async def analyze_melody(
             "key": result.get('key', 'C'),
             "chord_progression": result.get('chord_progression', []),
             
-            # Main visualization
+            # Main visualization (now handled in step 2)
             "visualization": {
                 "success": viz_success,
                 "file": viz_filename if viz_success else None,

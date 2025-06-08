@@ -348,7 +348,6 @@ def analyze_chord_progression_with_stretching(midi_file_path, segment_size=2, to
     print(f"\n🎵 ROBUST 8-chord analysis results:")
     print(f"  Progression: {' → '.join(chord_progression)}")
     print(f"🎼 Detected key: {detected_key}")
-    print(f"✅ ROBUST: Better timing tolerance + note filtering!")
     
     return {
         'analysis_type': 'chord_progression',

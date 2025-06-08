@@ -2,9 +2,9 @@ pip install -r requirements.txt
 
 todo: 
 1. tidy up backend 
-!!!!!!!! CHORD PROGRESSIONS OPTIMIZE 
 2. incorporate Vosk
 3. make the stop button stop when counting in
+4. add your recording
 
 
 
