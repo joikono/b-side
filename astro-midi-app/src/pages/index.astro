@@ -2155,7 +2155,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 const SpeechRecognition =
                     window.SpeechRecognition || window.webkitSpeechRecognition;
                 this.recognition = new SpeechRecognition();
-                this.recognition.continuous = true; // Keep listening
+                this.recognition.continuous = true;
                 this.recognition.interimResults = false;
                 this.recognition.lang = "en-US";
 
@@ -2169,17 +2169,50 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 };
 
                 this.recognition.onend = () => {
-                    // Restart if we're still supposed to be listening
-                    if (this.isListening) {
-                        setTimeout(() => this.recognition.start(), 100);
-                    }
+                    console.log("🎤 Recognition ended, restarting...");
+                    // Add delay and state check before restarting
+                    setTimeout(() => {
+                        if (this.isListening && !this.isSpeaking) {
+                            try {
+                                this.recognition.start();
+                            } catch (error) {
+                                console.log(
+                                    "🎤 Restart failed:",
+                                    error.message,
+                                );
+                                // Try again after longer delay
+                                setTimeout(() => {
+                                    if (this.isListening && !this.isSpeaking) {
+                                        try {
+                                            this.recognition.start();
+                                        } catch (e) {
+                                            console.log(
+                                                "🎤 Second restart failed:",
+                                                e.message,
+                                            );
+                                        }
+                                    }
+                                }, 2000);
+                            }
+                        }
+                    }, 500);
                 };
 
                 this.recognition.onerror = (event) => {
                     console.log("🎤 Speech error:", event.error);
-                    // Restart after errors (except permission denied)
-                    if (event.error !== "not-allowed" && this.isListening) {
-                        setTimeout(() => this.recognition.start(), 1000);
+                    if (event.error !== "not-allowed") {
+                        setTimeout(() => {
+                            if (this.isListening && !this.isSpeaking) {
+                                try {
+                                    this.recognition.start();
+                                } catch (error) {
+                                    console.log(
+                                        "🎤 Error restart failed:",
+                                        error.message,
+                                    );
+                                }
+                            }
+                        }, 1000);
                     }
                 };
             }
@@ -2230,7 +2263,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
                     this.speak("Cancelling recording");
                     stopCapture();
                     this.extendActiveSession();
-                } else if (command.includes("play")) {
+                } else if (command.includes("jam")) {
                     console.log("🎵 Playing...");
                     const playResponses = [
                         "Playing arrangement",
@@ -2283,13 +2316,109 @@ import CircularWaveform from "../components/circular_waveform.astro";
             }
         }
 
-        // Add this method to your VoiceCommands class
+        // Add this method to your VoiceCommands class////////////////////////////////////////////////////////
         async handleComplexCommand(command) {
-            this.speak("Let me think about that");
             this.extendActiveSession();
 
             try {
                 const apiKey = import.meta.env.PUBLIC_OPENAI_API_KEY;
+
+                // Get current analysis results if available
+                let contextMessage = "";
+
+                if (window.uploadedMidiResult) {
+                    const result = window.uploadedMidiResult;
+
+                    if (result.detected_type === "chord_progression") {
+                        const chords = result.chord_progression || [];
+                        contextMessage = `Current analyzed chord progression: ${chords.join(" → ")}. Key: ${result.key || "Unknown"}.`;
+                    } else if (result.harmonizations) {
+                        const style =
+                            document.getElementById("stickyHarmonyStyle")
+                                ?.value || "simple_pop";
+                        const chords =
+                            result.harmonizations[style]?.progression || [];
+                        contextMessage = `Current melody harmonized as: ${chords.join(" → ")}. Key: ${result.key || "Unknown"}.`;
+                    }
+
+                    if (result.key_confidence) {
+                        contextMessage += ` (${(result.key_confidence * 100).toFixed(0)}% confidence)`;
+                    }
+                }
+
+                // Determine if user has current analysis
+                const hasCurrentAnalysis = !!window.uploadedMidiResult;
+
+                const systemPrompt = hasCurrentAnalysis
+                    ? `You’re a music co-pilot for songwriters and composers.
+                    Your responses are part of a real-time creative flow, so keep replies under 30 words and focused. The user has already recorded and analyzed their music—you can see their chord progression.
+
+                    Your role:
+
+                    React naturally: use short, supportive phrases like “nice one,” “let’s build on that,” “here’s a thought,” or “this could be cool.”
+
+                    Suggest specific next chords based on the current progression.
+
+                    Offer harmonic variations, extensions, or substitutions—musically grounded and in context.
+
+                    Recommend arrangement ideas that build on what they’ve already played.
+
+                    Think like a producer: give actionable, concrete musical feedback.
+
+                    Help break creative blocks with quick, specific musical suggestions.
+
+                    Suggest melodic directions that fit and elevate their chords.
+
+                    For lyrics: help guide thought process or structure, but don’t write full lyrics.
+
+                    Keep things flowing—don’t over-explain or interrupt creative momentum.
+
+                    Stay in your lane: politely decline non-music questions.
+
+                    Avoid:
+
+                    Repeating suggestions to re-record—assume the music is already analyzed.
+
+                    Abstract or overly vague advice—always be musically useful.
+
+                    Tone: Warm, grounded, musically intelligent, and creatively supportive. You're here to help them make confident next moves.`
+                    : `You are a music co-pilot for songwriters and composers. Keep responses under 30 words since this is voice interaction.
+
+            Your role:
+            - Support through creative blocks by suggesting "reh-CORD" to capture their current musical ideas for analysis
+            - For chord progressions: always suggest recording what they have so far to recommend the next chord
+            - Arrange music around user ideas to help them hear fuller arrangements
+            - Act as producer with suggestive feedback, not demanding direction
+            - Stay intuitive and flow-friendly - don't over-talk or disrupt creativity
+            - For musical ideas that can be played: suggest saying "reh-CORD" to capture and analyze their MIDI input
+            - For lyrics: act as a thought-process guide, not a lyric generator - help calibrate their creative thinking
+            - Politely decline non-music queries as outside your scope
+
+            When users ask about chord progressions, always suggest they record their current chords first.
+            Always use "reh-CORD" (phonetic spelling) instead of "record" for the verb.
+
+            Tone: Supportive, suggestive, concise. You're an extra set of musically intelligent ears in their creative process.`;
+
+                const messages = [
+                    {
+                        role: "system",
+                        content: systemPrompt,
+                    },
+                ];
+
+                // Add context about current analysis if available
+                if (contextMessage) {
+                    messages.push({
+                        role: "system",
+                        content: contextMessage,
+                    });
+                }
+
+                // Add user command
+                messages.push({
+                    role: "user",
+                    content: command,
+                });
 
                 const response = await fetch(
                     "https://api.openai.com/v1/chat/completions",
@@ -2300,18 +2429,8 @@ import CircularWaveform from "../components/circular_waveform.astro";
                             Authorization: `Bearer ${apiKey}`,
                         },
                         body: JSON.stringify({
-                            model: "gpt-3.5-turbo",
-                            messages: [
-                                {
-                                    role: "system",
-                                    content:
-                                        "You are a helpful music assistant. Keep responses short (under 30 words) since this is voice interaction. Help with songwriting, chord progressions, and musical ideas.",
-                                },
-                                {
-                                    role: "user",
-                                    content: command,
-                                },
-                            ],
+                            model: "gpt-3.5-turbo", // Always use this since no images
+                            messages: messages,
                             max_tokens: 100,
                             temperature: 0.7,
                         }),
@@ -2328,9 +2447,6 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
                 const aiResponse = result.choices[0].message.content;
 
-                console.log("🤖 OpenAI response:", aiResponse);
-
-                // 🔧 FIX: Use longer speaking method for AI responses
                 this.speakLonger(aiResponse);
             } catch (error) {
                 console.error("❌ OpenAI request failed:", error);
@@ -2338,9 +2454,45 @@ import CircularWaveform from "../components/circular_waveform.astro";
             }
         }
 
+        // Add this helper method to the VoiceCommands class
+        async getVisualizationAsBase64(filename) {
+            try {
+                const response = await fetch(
+                    `/generated_visualizations/${filename}`,
+                );
+                if (!response.ok) {
+                    throw new Error(
+                        `Failed to fetch visualization: ${response.status}`,
+                    );
+                }
+
+                const blob = await response.blob();
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const base64 = reader.result.split(",")[1]; // Remove data:image/png;base64, prefix
+                        resolve(base64);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            } catch (error) {
+                console.error(
+                    "Error converting visualization to base64:",
+                    error,
+                );
+                return null;
+            }
+        }
+
         // 🆕 NEW: Longer speaking method for AI responses
         speakLonger(text) {
             if ("speechSynthesis" in window) {
+                // STOP LISTENING while speaking to prevent feedback loop
+                if (this.recognition) {
+                    this.recognition.stop();
+                }
+
                 this.isSpeaking = true;
                 console.log(
                     "🔇 Speaking mode ON (AI response) - commands blocked",
@@ -2366,6 +2518,10 @@ import CircularWaveform from "../components/circular_waveform.astro";
                     // 🔧 LONGER BUFFER for AI responses (3 seconds vs 1 second)
                     setTimeout(() => {
                         this.isSpeaking = false;
+                        // RESTART LISTENING after speaking
+                        if (this.isListening && this.recognition) {
+                            this.recognition.start();
+                        }
                         console.log(
                             "🎤 Speaking mode OFF - commands enabled (after AI response)",
                         );
@@ -2375,6 +2531,10 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 utterance.onerror = () => {
                     setTimeout(() => {
                         this.isSpeaking = false;
+                        // RESTART LISTENING after error
+                        if (this.isListening && this.recognition) {
+                            this.recognition.start();
+                        }
                         console.log("🎤 Speaking mode OFF after error");
                     }, 3000);
                 };
@@ -2430,6 +2590,11 @@ import CircularWaveform from "../components/circular_waveform.astro";
         // 🆕 NEW: Simple flag-based speak method
         speak(text) {
             if ("speechSynthesis" in window) {
+                // STOP LISTENING while speaking to prevent feedback loop
+                if (this.recognition) {
+                    this.recognition.stop();
+                }
+
                 this.isSpeaking = true; // 🚫 Block commands while speaking
                 console.log("🔇 Speaking mode ON - commands blocked");
 
@@ -2446,6 +2611,10 @@ import CircularWaveform from "../components/circular_waveform.astro";
                     // Add delay before allowing commands again
                     setTimeout(() => {
                         this.isSpeaking = false; // ✅ Allow commands again
+                        // RESTART LISTENING after speaking
+                        if (this.isListening && this.recognition) {
+                            this.recognition.start();
+                        }
                         console.log("🎤 Speaking mode OFF - commands enabled");
                     }, 1000); // 1 second buffer
                 };
@@ -2453,6 +2622,10 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 utterance.onerror = () => {
                     setTimeout(() => {
                         this.isSpeaking = false;
+                        // RESTART LISTENING after error
+                        if (this.isListening && this.recognition) {
+                            this.recognition.start();
+                        }
                         console.log("🎤 Speaking mode OFF after error");
                     }, 1000);
                 };
@@ -2463,7 +2636,8 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }
 
         startListening() {
-            if (this.recognition) {
+            if (this.recognition && !this.isListening) {
+                // Add !this.isListening check
                 this.isListening = true;
                 this.recognition.start();
                 console.log('👂 Always listening for "Hey Wave"...');
