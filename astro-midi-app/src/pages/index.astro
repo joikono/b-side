@@ -73,6 +73,34 @@ import CircularWaveform from "../components/circular_waveform.astro";
                             >
                         </div>
                     </div>
+                    <div
+                        id="recordedTrackPlayer"
+                        class="recorded-track-player"
+                        style="display: none;"
+                    >
+                        <midi-player
+                            id="recordedTrackMidiPlayer"
+                            src=""
+                            sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
+                            loop
+                        >
+                        </midi-player>
+                        <div class="recorded-track-controls">
+                            <button
+                                onclick="stopRecordedTrack()"
+                                class="mini-midi-btn">⏹️</button
+                            >
+                            <button
+                                onclick="toggleRecordedTrackLoop()"
+                                class="mini-midi-btn">🔄</button
+                            >
+                            <button
+                                onclick="saveRecordedTrack()"
+                                class="mini-midi-btn download-btn"
+                                title="Save Recording">💾</button
+                            >
+                        </div>
+                    </div>
 
                     <!-- Arrangement controls in horizontal wrapper -->
                     <div class="arrangement-controls-container">
@@ -746,6 +774,37 @@ import CircularWaveform from "../components/circular_waveform.astro";
         box-shadow: 0 2px 8px rgba(39, 174, 96, 0.4);
     }
 
+    .recorded-track-player {
+        position: absolute;
+        bottom: 140%; /* Position above the sticky player */
+        left: 0;
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 2px solid #3498db; /* Different color to distinguish */
+        border-radius: 12px;
+        padding: 6px 10px;
+        max-width: 420px;
+        align-self: flex-start;
+    }
+
+    .recorded-track-player midi-player {
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        height: 35px;
+        width: 220px;
+        flex-shrink: 1;
+    }
+
+    .recorded-track-controls {
+        display: flex;
+        gap: 5px;
+    }
+
     .control-group {
         margin-bottom: 15px;
         display: flex;
@@ -1073,6 +1132,9 @@ import CircularWaveform from "../components/circular_waveform.astro";
     const defaultBPM = 120;
     const beatsPerLoop = 16;
     let midiCheckLoopInterval;
+
+    let recordedTrackBlob = null;
+    let recordedTrackUrl = null;
 
     // Arrangement controls functionality
     let isArrangementMenuOpen = false;
@@ -1590,11 +1652,21 @@ import CircularWaveform from "../components/circular_waveform.astro";
             // Sort notes by time
             const sortedNotes = [...notes].sort((a, b) => a.time - b.time);
 
-            for (const note of sortedNotes) {
+            // Find the earliest note time to normalize against
+            const firstNoteTime =
+                sortedNotes.length > 0 ? sortedNotes[0].time : 0;
+
+            // Normalize all note times so the first note starts at 0
+            const normalizedNotes = sortedNotes.map((note) => ({
+                ...note,
+                time: note.time - firstNoteTime,
+            }));
+
+            for (const note of normalizedNotes) {
                 const deltaTime = Math.max(
                     0,
-                    Math.round((note.time - currentTime) * 96),
-                ); // Convert to ticks
+                    Math.round((note.time - currentTime) * 160),
+                ); // Convert to ticks at 100 BPM
                 currentTime = note.time;
 
                 // Add MIDI event
@@ -1814,7 +1886,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
             this.wetGain = null;
             this.reverbNode = null;
             this.activeNotes = new Map();
-            this.volume = 0.7;
+            this.volume = 0.1;
             this.reverbAmount = 0.15; // 15% reverb by default
             this.soundType = "piano";
         }
@@ -3005,7 +3077,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
         const mode = "time";
 
         // **CRITICAL FIX: Use the buffered duration for both internal and external timeouts**
-        const exactDurationFor16Bars = 10.1; // 16 beats at 100 BPM = 9.6s + 0.5s buffer
+        const exactDurationFor16Bars = 10.6; // 16 beats at 100 BPM = 9.6s + 0.5s buffer
 
         let duration;
         if (predefinedDuration) {
@@ -3158,6 +3230,19 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }
 
         console.log("🗑️ Cleared previous analysis results");
+
+        // Hide recorded track player when starting new recording
+        const recordedPlayer = document.getElementById("recordedTrackPlayer");
+        if (recordedPlayer) {
+            recordedPlayer.style.display = "none";
+        }
+
+        // Clean up recorded track URLs
+        if (recordedTrackUrl) {
+            URL.revokeObjectURL(recordedTrackUrl);
+            recordedTrackUrl = null;
+        }
+        recordedTrackBlob = null;
     }
 
     function resetRecordingUI() {
@@ -3235,6 +3320,17 @@ import CircularWaveform from "../components/circular_waveform.astro";
             }
 
             const midiBlob = midiRecorder.convertToMidiBlob();
+
+            recordedTrackBlob = midiBlob;
+
+            // Create a URL for the recorded track player
+            if (recordedTrackUrl) {
+                URL.revokeObjectURL(recordedTrackUrl); // Clean up previous URL
+            }
+            recordedTrackUrl = URL.createObjectURL(midiBlob);
+
+            // Show the recorded track player
+            showRecordedTrackPlayer();
 
             const formData = new FormData();
             formData.append("file", midiBlob, "recorded_melody.mid");
@@ -3818,6 +3914,60 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }, 1000);
     });
 
+    function showRecordedTrackPlayer() {
+        const recordedPlayer = document.getElementById("recordedTrackPlayer");
+        const recordedMidiElement = document.getElementById(
+            "recordedTrackMidiPlayer",
+        );
+
+        if (recordedPlayer && recordedMidiElement && recordedTrackUrl) {
+            recordedMidiElement.src = recordedTrackUrl;
+            recordedPlayer.style.display = "flex";
+            console.log("🎵 Recorded track player loaded");
+        }
+    }
+
+    function playRecordedTrack() {
+        const player = document.getElementById("recordedTrackMidiPlayer");
+        if (player && player.src) {
+            player.start();
+            console.log("🎵 Started playing recorded track");
+        } else {
+            console.log("❌ No recorded track to play");
+        }
+    }
+
+    function stopRecordedTrack() {
+        const player = document.getElementById("recordedTrackMidiPlayer");
+        if (player) {
+            player.stop();
+            player.currentTime = 0;
+            console.log("⏹️ Stopped recorded track");
+        }
+    }
+
+    function toggleRecordedTrackLoop() {
+        const player = document.getElementById("recordedTrackMidiPlayer");
+        if (player) {
+            player.loop = !player.loop;
+            console.log("Recorded track loop:", player.loop ? "ON" : "OFF");
+        }
+    }
+
+    function saveRecordedTrack() {
+        if (recordedTrackBlob) {
+            const link = document.createElement("a");
+            link.href = recordedTrackUrl;
+            link.download = `recorded_track_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.mid`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            console.log("🎵 Downloading recorded track");
+        } else {
+            console.log("❌ No recorded track to save");
+        }
+    }
+
     // Make functions globally accessible
     window.connectDevice = connectDevice;
     window.loadDevices = loadDevices;
@@ -3839,4 +3989,9 @@ import CircularWaveform from "../components/circular_waveform.astro";
     window.stopStickyMidi = stopStickyMidi;
     window.toggleStickyMidiLoop = toggleStickyMidiLoop;
     window.downloadCurrentMidi = downloadCurrentMidi;
+
+    window.playRecordedTrack = playRecordedTrack;
+    window.stopRecordedTrack = stopRecordedTrack;
+    window.toggleRecordedTrackLoop = toggleRecordedTrackLoop;
+    window.saveRecordedTrack = saveRecordedTrack;
 </script>

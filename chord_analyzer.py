@@ -125,7 +125,7 @@ def apply_stretching_to_chord_analysis(notes):
         # Calculate stretch factor (same as force_exactly_8_chords_analysis)
         target_duration = 16.0  # 16 beats
         stretch_factor = target_duration / actual_duration
-        stretch_factor *= 0.98  # Apply the same correction factor
+        stretch_factor *= 1  # Apply the same correction factor
         
         offset = music_start
         

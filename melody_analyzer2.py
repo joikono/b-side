@@ -198,40 +198,68 @@ def calculate_note_emphasis(note):
     return emphasis
 
 def suggest_chord_simple_style(segment_notes, key, scale_degrees):
-    """Suggest chord using Simple/Pop harmonization style."""
+    """Suggest chord using Simple/Pop harmonization style - ROBUST VERSION."""
+    if not segment_notes:
+        return None, 0
+        
     chord_scores = {}
     pc_weights = defaultdict(float)
     
+    # More robust note weighting
     for note in segment_notes:
         emphasis = calculate_note_emphasis(note)
+        # Reduce extreme emphasis to prevent single notes from dominating
+        emphasis = min(emphasis, 2.5)  # Cap maximum emphasis
         pc_weights[note['pitch_class']] += emphasis
+    
+    # Find the most prominent note to guide chord selection
+    if pc_weights:
+        dominant_pc = max(pc_weights.items(), key=lambda x: x[1])[0]
+        dominant_note_name = PITCH_CLASS_NAMES[dominant_pc]
+    else:
+        dominant_pc = None
+        dominant_note_name = None
     
     for chord_name, chord_pcs in SIMPLE_CHORDS.items():
         score = 0.0
         
-        # Basic chord tone matching
-        for pc, weight in pc_weights.items():
-            if pc in chord_pcs:
-                score += weight * 2.0
-                if pc == chord_pcs[0]:  # Root
-                    score += weight * 1.0
-            else:
-                if pc in scale_degrees:
-                    score -= weight * 0.1  # Small penalty for non-chord scale tones
+        # Score based on chord tone matching
+        total_weight = sum(pc_weights.values())
+        if total_weight > 0:
+            for pc, weight in pc_weights.items():
+                normalized_weight = weight / total_weight
+                
+                if pc in chord_pcs:
+                    score += normalized_weight * 2.0
+                    if pc == chord_pcs[0]:  # Root bonus
+                        score += normalized_weight * 1.0
                 else:
-                    score -= weight * 0.4  # Larger penalty for out-of-key notes
+                    # Gentle penalty for non-chord tones
+                    if pc in scale_degrees:
+                        score -= normalized_weight * 0.1
+                    else:
+                        score -= normalized_weight * 0.3
         
-        # Bonus for common pop chord progressions (I, vi, IV, V)
-        is_minor_key = key.endswith('m')
-        if not is_minor_key:  # Major key
-            if chord_name in [key, key.replace(key[0], PITCH_CLASS_NAMES[(list(PITCH_CLASS_NAMES.values()).index(key) + 5) % 12]), 
-                             key.replace(key[0], PITCH_CLASS_NAMES[(list(PITCH_CLASS_NAMES.values()).index(key) + 3) % 12]) + 'm',
-                             key.replace(key[0], PITCH_CLASS_NAMES[(list(PITCH_CLASS_NAMES.values()).index(key) + 7) % 12])]:
-                score += 0.5
-        
+        # Bonus if chord root matches the dominant note
+        if dominant_note_name and chord_name.startswith(dominant_note_name):
+            score += 0.5
+            
+        # Bonus for diatonic chords in the key
+        chord_root = chord_name.replace('m', '')
+        if any(PITCH_CLASS_NAMES[pc] == chord_root for pc in scale_degrees):
+            score += 0.3
+            
         chord_scores[chord_name] = score
     
-    best_chord = max(chord_scores.items(), key=lambda x: x[1]) if chord_scores else (None, 0)
+    if not chord_scores:
+        return None, 0
+    
+    best_chord = max(chord_scores.items(), key=lambda x: x[1])
+    
+    # Require minimum confidence to avoid random selections
+    if best_chord[1] < 0.4:
+        return None, 0
+        
     return best_chord[0], best_chord[1]
 
 def suggest_chord_folk_style(segment_notes, key, scale_degrees):
@@ -611,7 +639,7 @@ def force_exactly_8_chords_analysis(midi_path):
             
             # Calculate stretch factor
             stretch_factor = 16.0 / actual_duration
-            stretch_factor *= 0.98  # Try values between 0.95-0.99
+            stretch_factor *= 1  # Try values between 0.95-0.99
 
             offset = music_start
             

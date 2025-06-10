@@ -6,7 +6,7 @@ todo:
 3. make the stop button stop when counting in
 4. add your recording
 
-
+python.analysis.typeCheckingMode
 
 Phase 1: Continue with Astro (Short Term)
 
