@@ -1136,11 +1136,81 @@ import CircularWaveform from "../components/circular_waveform.astro";
     let recordedTrackBlob = null;
     let recordedTrackUrl = null;
 
+    let precisionPlayer = null;
+
     // Arrangement controls functionality
     let isArrangementMenuOpen = false;
 
     // voice commands
     let voiceCommands = null;
+
+    async function initPrecisionPlayer() {
+        if (!precisionPlayer) {
+            precisionPlayer = new PrecisionMIDIPlayer();
+            await precisionPlayer.init();
+            console.log("🎯 Precision MIDI player initialized");
+        }
+    }
+
+    async function playStickyMidiPrecision() {
+        const player = document.getElementById("stickyArrangementPlayer");
+        if (!player || !player.src) {
+            console.log("❌ No arrangement loaded");
+            return;
+        }
+
+        try {
+            // Try precision player first
+            await initPrecisionPlayer();
+            const success = await precisionPlayer.loadAndPlayWithDuration(
+                player.src,
+            );
+
+            if (success) {
+                console.log("🎯 Using precision playback");
+                return;
+            }
+        } catch (error) {
+            console.log(
+                "⚠️ Precision player failed, falling back to html-midi-player",
+            );
+        }
+
+        // Fallback to existing player
+        player.start();
+    }
+
+    function stopStickyMidiPrecision() {
+        // Stop precision player
+        if (precisionPlayer) {
+            precisionPlayer.stop();
+        }
+
+        // Also stop html-midi-player as fallback
+        const player = document.getElementById("stickyArrangementPlayer");
+        if (player) {
+            player.stop();
+            player.currentTime = 0;
+        }
+    }
+
+    // Progressive enhancement - replace your existing functions
+    function enhanceExistingMidiControls() {
+        // Replace the playStickyMidi function
+        window.playStickyMidi = playStickyMidiPrecision;
+        window.stopStickyMidi = stopStickyMidiPrecision;
+
+        // Add precision controls to your UI
+        const stickyControls = document.querySelector(".sticky-midi-controls");
+        if (stickyControls) {
+            const precisionBtn = document.createElement("button");
+            precisionBtn.className = "mini-midi-btn";
+            precisionBtn.innerHTML = "🎯";
+            precisionBtn.title = "Precision Mode (9.6s)";
+            precisionBtn.onclick = () => playStickyMidiPrecision();
+            stickyControls.appendChild(precisionBtn);
+        }
+    }
 
     function autoConnect() {
         const deviceSelect = document.getElementById("deviceSelect");
@@ -1681,6 +1751,100 @@ import CircularWaveform from "../components/circular_waveform.astro";
             return new Uint8Array(events);
         }
 
+        // 🎯 NEW: Create MIDI specifically for user playback with proper padding
+        createPlaybackMidiBlob() {
+            if (this.recordedNotes.length === 0) {
+                throw new Error("No notes recorded");
+            }
+
+            const midiData = this.createPlaybackMidiData(this.recordedNotes);
+            return new Blob([midiData], { type: "audio/midi" });
+        }
+
+        createPlaybackMidiData(notes) {
+            // Same header as original
+            const header = new Uint8Array([
+                0x4d,
+                0x54,
+                0x68,
+                0x64, // "MThd"
+                0x00,
+                0x00,
+                0x00,
+                0x06, // Header length
+                0x00,
+                0x00, // Format 0
+                0x00,
+                0x01, // 1 track
+                0x00,
+                0x60, // 96 ticks per quarter note
+            ]);
+
+            const trackData = this.createPlaybackTrackData(notes);
+            const trackHeader = new Uint8Array([
+                0x4d,
+                0x54,
+                0x72,
+                0x6b, // "MTrk"
+                ...this.int32ToBytes(trackData.length),
+            ]);
+
+            const midiFile = new Uint8Array(
+                header.length + trackHeader.length + trackData.length,
+            );
+            midiFile.set(header, 0);
+            midiFile.set(trackHeader, header.length);
+            midiFile.set(trackData, header.length + trackHeader.length);
+
+            return midiFile;
+        }
+
+        createPlaybackTrackData(notes) {
+            const events = [];
+            let currentTime = 0;
+            const targetDuration = 9.6;
+
+            // Sort notes by time
+            const sortedNotes = [...notes].sort((a, b) => a.time - b.time);
+            const firstNoteTime =
+                sortedNotes.length > 0 ? sortedNotes[0].time : 0;
+            const normalizedNotes = sortedNotes.map((note) => ({
+                ...note,
+                time: note.time - firstNoteTime,
+            }));
+
+            // 🎯 NEW APPROACH: Start with a sustain note that lasts the full duration
+            // Add a very quiet sustain note at the beginning
+            events.push(...this.variableLengthQuantity(0)); // Start immediately
+            events.push(0x90, 127, 1); // Very quiet high note (out of way)
+
+            // Add all user notes on top
+            for (const note of normalizedNotes) {
+                const deltaTime = Math.max(
+                    0,
+                    Math.round((note.time - currentTime) * 160),
+                );
+                currentTime = note.time;
+
+                const status = note.isNoteOn ? 0x90 : 0x80;
+                events.push(...this.variableLengthQuantity(deltaTime));
+                events.push(status, note.note, note.velocity);
+            }
+
+            // End the sustain note at exactly 9.6 seconds
+            const remainingTicks = Math.round(
+                (targetDuration - currentTime) * 160,
+            );
+            events.push(...this.variableLengthQuantity(remainingTicks));
+            events.push(0x80, 127, 0); // End sustain note at 9.6 seconds
+
+            console.log(`🔍 Sustain note holds for full ${targetDuration}s`);
+
+            // End of track
+            events.push(0x00, 0xff, 0x2f, 0x00);
+            return new Uint8Array(events);
+        }
+
         variableLengthQuantity(value) {
             const bytes = [];
             bytes.unshift(value & 0x7f);
@@ -1699,6 +1863,176 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 (value >> 8) & 0xff,
                 value & 0xff,
             ];
+        }
+    }
+
+    class PrecisionMIDIPlayer {
+        constructor() {
+            this.synth = null;
+            this.forcedDuration = 9.6; // exactly 16 beats at 100 BPM
+            this.isPlaying = false;
+            this.currentMidiData = null;
+            this.scheduledEvents = [];
+        }
+
+        async init() {
+            if (!this.synth) {
+                // Use your existing pianoSynth's audio context for consistency
+                this.synth = new Tone.PolySynth().toDestination();
+
+                // Connect to your existing visualizer if available
+                if (pianoSynth && pianoSynth.audioContext) {
+                    Tone.setContext(pianoSynth.audioContext);
+                }
+            }
+        }
+
+        async loadAndPlayWithDuration(midiUrl, forcedDuration = null) {
+            await this.init();
+
+            const duration = forcedDuration || this.forcedDuration;
+
+            try {
+                // Import @tonejs/midi dynamically (since it's not in your CDN)
+                const { Midi } = await import(
+                    "https://cdn.skypack.dev/@tonejs/midi"
+                );
+
+                const midi = await Midi.fromUrl(midiUrl);
+                this.currentMidiData = midi;
+
+                console.log(
+                    `🎵 Loading MIDI with forced duration: ${duration}s`,
+                );
+
+                // Clear any existing scheduled events
+                this.stop();
+
+                // Schedule forced stop at exactly the specified duration
+                const stopEvent = Tone.Transport.schedule(() => {
+                    this.stop();
+                    console.log(`⏰ Playback stopped at exactly ${duration}s`);
+                }, duration);
+
+                this.scheduledEvents.push(stopEvent);
+
+                // Schedule all notes with duration checking
+                midi.tracks.forEach((track) => {
+                    track.notes.forEach((note) => {
+                        if (note.time < duration) {
+                            const adjustedDuration = Math.min(
+                                note.duration,
+                                duration - note.time,
+                            );
+
+                            const noteEvent = Tone.Transport.schedule(
+                                (time) => {
+                                    this.synth.triggerAttackRelease(
+                                        note.name,
+                                        adjustedDuration,
+                                        time,
+                                        note.velocity,
+                                    );
+                                },
+                                note.time,
+                            );
+
+                            this.scheduledEvents.push(noteEvent);
+                        }
+                    });
+                });
+
+                // Start transport
+                Tone.Transport.start();
+                this.isPlaying = true;
+
+                console.log(
+                    `🎵 Precision playback started - will stop at ${duration}s`,
+                );
+
+                // Update your existing UI
+                this.updatePlaybackStatus(true);
+
+                return true;
+            } catch (error) {
+                console.error("❌ Precision MIDI playback failed:", error);
+                return false;
+            }
+        }
+
+        stop() {
+            if (this.isPlaying) {
+                Tone.Transport.stop();
+
+                // Clear all scheduled events
+                this.scheduledEvents.forEach((event) => {
+                    Tone.Transport.clear(event);
+                });
+                this.scheduledEvents = [];
+
+                this.isPlaying = false;
+                this.updatePlaybackStatus(false);
+
+                console.log("🛑 Precision playback stopped");
+            }
+        }
+
+        pause() {
+            if (this.isPlaying) {
+                Tone.Transport.pause();
+                this.updatePlaybackStatus(false);
+            }
+        }
+
+        resume() {
+            if (!this.isPlaying && Tone.Transport.state === "paused") {
+                Tone.Transport.start();
+                this.updatePlaybackStatus(true);
+            }
+        }
+
+        updatePlaybackStatus(playing) {
+            // Update your existing UI elements
+            const statusElements = document.querySelectorAll(
+                ".midi-player-status",
+            );
+            statusElements.forEach((el) => {
+                el.textContent = playing
+                    ? "Playing (Precision Mode)"
+                    : "Stopped";
+            });
+        }
+
+        // Enhanced loop functionality with precise timing
+        async playWithLoop(midiUrl, loopCount = -1) {
+            let currentLoop = 0;
+
+            const playLoop = async () => {
+                if (loopCount !== -1 && currentLoop >= loopCount) {
+                    console.log(
+                        `🔄 Loop sequence completed (${currentLoop} loops)`,
+                    );
+                    return;
+                }
+
+                await this.loadAndPlayWithDuration(midiUrl);
+                currentLoop++;
+
+                if (loopCount === -1 || currentLoop < loopCount) {
+                    // Schedule next loop at exactly the right time
+                    setTimeout(
+                        () => {
+                            if (this.isPlaying) {
+                                // Only continue if not manually stopped
+                                playLoop();
+                            }
+                        },
+                        this.forcedDuration * 1000 + 50,
+                    ); // 50ms gap between loops
+                }
+            };
+
+            await playLoop();
         }
     }
 
@@ -2158,9 +2492,9 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
             this.activeNotes.set(midiNote, sound);
 
-            console.log(
-                `🎹 Playing note ${midiNote} (${frequency.toFixed(1)}Hz) at velocity ${velocity}`,
-            );
+            // console.log(
+            //     `🎹 Playing note ${midiNote} (${frequency.toFixed(1)}Hz) at velocity ${velocity}`,
+            // );
         }
 
         stopNote(midiNote) {
@@ -2175,7 +2509,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 );
 
                 this.activeNotes.delete(midiNote);
-                console.log(`🎹 Stopping note ${midiNote}`);
+                // console.log(`🎹 Stopping note ${midiNote}`);
             }
         }
 
@@ -3280,6 +3614,26 @@ import CircularWaveform from "../components/circular_waveform.astro";
         };
     }
 
+    async function extendMidiFile(originalBlob) {
+        try {
+            const formData = new FormData();
+            formData.append("file", originalBlob, "original.mid");
+
+            const response = await fetch(`${API_BASE}/extend-midi`, {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!response.ok)
+                throw new Error(`Extension failed: ${response.status}`);
+
+            return await response.blob();
+        } catch (error) {
+            console.error("❌ Failed to extend MIDI:", error);
+            return originalBlob; // Fallback to original
+        }
+    }
+
     // Fixed stopCapture function
     function stopCapture() {
         console.log("🛑 Stop capture called");
@@ -3303,7 +3657,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
         updateStatus("captureStatus", "⏹️ Recording stopped", "ready");
     }
 
-    // Enhanced uploadRecordedMIDI with proper result handling
+    // Enhanced uploadRecordedMIDI with duration fix integration
     async function uploadRecordedMIDI() {
         try {
             // Double-check we have fresh data
@@ -3319,48 +3673,149 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 return;
             }
 
+            updateStatus(
+                "captureStatus",
+                "🔧 Fixing MIDI duration to 9.6s...",
+                "analyzing",
+            );
+
             const midiBlob = midiRecorder.convertToMidiBlob();
 
-            recordedTrackBlob = midiBlob;
+            // 🎯 STEP 1: Fix duration on backend first
+            const durationFormData = new FormData();
+            durationFormData.append("file", midiBlob, "recorded_melody.mid");
 
-            // Create a URL for the recorded track player
-            if (recordedTrackUrl) {
-                URL.revokeObjectURL(recordedTrackUrl); // Clean up previous URL
+            const durationFixResponse = await fetch(
+                `${API_BASE}/fix-midi-duration`,
+                {
+                    method: "POST",
+                    body: durationFormData,
+                },
+            );
+
+            if (!durationFixResponse.ok) {
+                throw new Error(
+                    `Duration fix failed: ${durationFixResponse.status}`,
+                );
             }
-            recordedTrackUrl = URL.createObjectURL(midiBlob);
 
-            // Show the recorded track player
+            const fixedMidiBlob = await durationFixResponse.blob();
+            console.log("🎯 MIDI duration fixed to exactly 9.6 seconds");
+
+            // Update recorded track with FIXED version
+            recordedTrackBlob = fixedMidiBlob;
+
+            // Create URL for the fixed version
+            if (recordedTrackUrl) {
+                URL.revokeObjectURL(recordedTrackUrl);
+            }
+            recordedTrackUrl = URL.createObjectURL(fixedMidiBlob);
+
+            // Show the fixed track player
             showRecordedTrackPlayer();
 
-            const formData = new FormData();
-            formData.append("file", midiBlob, "recorded_melody.mid");
+            updateStatus(
+                "captureStatus",
+                "📤 Analyzing fixed MIDI...",
+                "analyzing",
+            );
+
+            // 🎯 STEP 2: Analyze the FIXED version
+            const analysisFormData = new FormData();
+            analysisFormData.append(
+                "file",
+                fixedMidiBlob,
+                "recorded_melody_fixed.mid",
+            );
 
             const response = await fetch(`${API_BASE}/analyze/melody`, {
                 method: "POST",
-                body: formData,
+                body: analysisFormData,
             });
 
             if (!response.ok) {
-                throw new Error(`Upload failed: ${response.status}`);
+                throw new Error(`Analysis failed: ${response.status}`);
             }
 
             const result = await response.json();
 
-            updateStatus("captureStatus", "Analysis Complete!", "ready");
-            console.log("🎹 MIDI analyzed successfully:", result);
-
-            // Display the fresh results FIRST
-            displayAutoAnalysisResults(result);
-
-            // THEN store the result for later use
-            window.uploadedMidiResult = result;
-        } catch (error) {
-            console.error("Error uploading MIDI:", error);
             updateStatus(
                 "captureStatus",
-                "Failed to upload recorded MIDI",
-                "error",
+                "✅ Analysis Complete! (Duration: 9.6s)",
+                "ready",
             );
+            console.log("🎹 Fixed MIDI analyzed successfully:", result);
+
+            // Display the results
+            displayAutoAnalysisResults(result);
+
+            // Store the result for later use
+            window.uploadedMidiResult = result;
+        } catch (error) {
+            console.error("Error in MIDI upload/fix process:", error);
+            updateStatus("captureStatus", `Failed: ${error.message}`, "error");
+        }
+    }
+
+    // 🎯 NEW: Test function to verify duration fix is working
+    async function testDurationFix() {
+        const player = document.getElementById("recordedTrackMidiPlayer");
+        if (player && player.src) {
+            console.log("🧪 Testing duration fix...");
+
+            player.addEventListener("stop", function testListener() {
+                const duration = player.currentTime || 0;
+                console.log(
+                    `🧪 Test result: Player stopped at ${duration.toFixed(2)}s`,
+                );
+
+                if (Math.abs(duration - 9.6) < 0.1) {
+                    console.log("✅ Duration fix successful!");
+                    updateStatus(
+                        "captureStatus",
+                        "✅ Duration fix verified: 9.6s",
+                        "ready",
+                    );
+                } else {
+                    console.log(
+                        `❌ Duration fix failed: expected 9.6s, got ${duration.toFixed(2)}s`,
+                    );
+                    updateStatus(
+                        "captureStatus",
+                        `❌ Duration fix failed: ${duration.toFixed(2)}s`,
+                        "error",
+                    );
+                }
+
+                // Remove this test listener
+                player.removeEventListener("stop", testListener);
+            });
+
+            // Start and let it play to completion
+            player.start();
+            updateStatus(
+                "captureStatus",
+                "🧪 Testing 9.6s duration...",
+                "analyzing",
+            );
+        } else {
+            console.log("❌ No recorded track to test");
+        }
+    }
+
+    // 🎯 NEW: Add test button to your recorded track controls
+    function addDurationTestButton() {
+        const recordedControls = document.querySelector(
+            ".recorded-track-controls",
+        );
+        if (recordedControls) {
+            const testBtn = document.createElement("button");
+            testBtn.className = "mini-midi-btn";
+            testBtn.innerHTML = "🧪";
+            testBtn.title = "Test 9.6s Duration";
+            testBtn.onclick = testDurationFix;
+            recordedControls.appendChild(testBtn);
+            console.log("🧪 Duration test button added");
         }
     }
 
@@ -3892,7 +4347,15 @@ import CircularWaveform from "../components/circular_waveform.astro";
             });
         }
 
-        // Add this right after voiceCommands initialization:
+        // At the end of your existing DOMContentLoaded function, add:
+        setTimeout(() => {
+            if (metronome) {
+                fixMetronomeStartMIDIRecording();
+                console.log("🔧 Metronome startMIDIRecording method fixed");
+            }
+        }, 1000);
+
+        // Initialize voice commands and precision MIDI controls
         setTimeout(() => {
             voiceCommands = new VoiceCommands();
 
@@ -3903,17 +4366,14 @@ import CircularWaveform from "../components/circular_waveform.astro";
             console.log(
                 '🎤 Voice commands initialized - say "Hey Wave" to activate',
             );
-        }, 2000);
 
-        // At the end of your existing DOMContentLoaded function, add:
-        setTimeout(() => {
-            if (metronome) {
-                fixMetronomeStartMIDIRecording();
-                console.log("🔧 Metronome startMIDIRecording method fixed");
-            }
-        }, 1000);
+            // 🎯 ADD PRECISION MIDI ENHANCEMENT HERE
+            enhanceExistingMidiControls();
+            console.log("🎯 Precision MIDI controls enhanced");
+        }, 2000);
     });
 
+    // 🎯 Add test button when recorded track player is shown
     function showRecordedTrackPlayer() {
         const recordedPlayer = document.getElementById("recordedTrackPlayer");
         const recordedMidiElement = document.getElementById(
@@ -3922,8 +4382,25 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
         if (recordedPlayer && recordedMidiElement && recordedTrackUrl) {
             recordedMidiElement.src = recordedTrackUrl;
+
+            // 🎯 FIX: Set playback rate to match 100 BPM (from default 120 BPM)
+            recordedMidiElement.playbackRate = baseBPM / defaultBPM; // 100/120 = 0.833
+
             recordedPlayer.style.display = "flex";
-            console.log("🎵 Recorded track player loaded");
+            console.log(
+                `🎵 Recorded track player loaded with fixed duration at ${baseBPM} BPM (rate: ${recordedMidiElement.playbackRate.toFixed(3)})`,
+            );
+
+            // Add test button if not already present
+            setTimeout(() => {
+                if (
+                    !document.querySelector(
+                        '.recorded-track-controls .mini-midi-btn[title="Test 9.6s Duration"]',
+                    )
+                ) {
+                    addDurationTestButton();
+                }
+            }, 100);
         }
     }
 

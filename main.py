@@ -13,6 +13,7 @@ import logging
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
+from mido import MidiFile, MidiTrack, Message, MetaMessage
 
 # Import your existing modules
 from model_manager import MagentaModelManager
@@ -201,8 +202,12 @@ async def analyze_melody(
         
         # Initialize visualization variables
         timestamp = int(time.time())
-        base_name = os.path.splitext(file.filename)[0]
+        base_name = os.path.splitext(file.filename or "uploaded")[0]
         viz_success = False
+        
+        # Fix the splitext type error by ensuring we have a string
+        filename = file.filename if file.filename is not None else "uploaded"
+        base_name = os.path.splitext(filename)[0]
         viz_filename = None
         
         # BRANCHING LOGIC: Different analysis based on detection
@@ -383,6 +388,136 @@ async def generate_arrangement(request: ArrangementRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Arrangement generation failed: {str(e)}")
 
+@app.post("/fix-midi-duration")
+async def fix_midi_duration(file: UploadFile = File(...)):
+    """Force MIDI file to exactly 9.6 seconds - extend short files, truncate long files"""
+    try:
+        # Save uploaded file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mid') as temp_input:
+            temp_input.write(await file.read())
+            temp_input_path = temp_input.name
+        
+        # Load with mido
+        midi = MidiFile(temp_input_path)
+        
+        # Calculate exact target in ticks
+        ticks_per_beat = midi.ticks_per_beat or 480
+        target_ticks = int(9.6 * 100 * ticks_per_beat / 60)  # 9.6s at 100 BPM
+        
+        print(f"🎯 Target: {target_ticks} ticks for 9.6s at 100 BPM")
+        print(f"🎵 Original MIDI Type: {midi.type}, Tracks: {len(midi.tracks)}")
+        
+        if len(midi.tracks) == 0:
+            raise HTTPException(status_code=400, detail="MIDI file has no tracks")
+        
+        # STEP 1: Process user's track with precise timing control
+        original_track = midi.tracks[0]
+        
+        # Analyze all messages and their absolute timing
+        processed_messages = []
+        current_ticks = 0
+        
+        for msg in original_track:
+            current_ticks += msg.time
+            
+            if msg.type == 'end_of_track':
+                continue  # Skip end_of_track, we'll add it later
+            
+            # 🔑 TRUNCATION LOGIC: Only include events that start before 9.6s
+            if current_ticks <= target_ticks:
+                processed_messages.append({
+                    'message': msg.copy(),
+                    'absolute_time': current_ticks,
+                    'delta_time': msg.time
+                })
+                
+                # 🔑 SPECIAL CASE: If this is a note_on, ensure corresponding note_off at 9.6s max
+                if hasattr(msg, 'type') and msg.type == 'note_on' and hasattr(msg, 'note'):
+                    # Look ahead for the corresponding note_off
+                    temp_ticks = current_ticks
+                    found_note_off = False
+                    
+                    for future_msg in original_track[original_track.index(msg) + 1:]:
+                        temp_ticks += future_msg.time
+                        
+                        if (hasattr(future_msg, 'type') and future_msg.type == 'note_off' and
+                            hasattr(future_msg, 'note') and future_msg.note == msg.note and
+                            hasattr(future_msg, 'channel') and future_msg.channel == msg.channel):
+                            
+                            if temp_ticks > target_ticks:
+                                # Add truncated note_off at exactly 9.6s
+                                note_off_time = target_ticks
+                                processed_messages.append({
+                                    'message': Message('note_off', channel=msg.channel, 
+                                                     note=msg.note, velocity=0),
+                                    'absolute_time': note_off_time,
+                                    'delta_time': 0  # Will be calculated later
+                                })
+                                print(f"🔪 Truncated note {msg.note} to end at 9.6s")
+                            found_note_off = True
+                            break
+            else:
+                print(f"🔪 Truncated event at {current_ticks} ticks (beyond 9.6s)")
+        
+        original_duration = current_ticks
+        print(f"🎵 Original duration: {original_duration} ticks ({original_duration * 60 / (100 * ticks_per_beat):.2f}s)")
+        
+        # STEP 2: Sort messages by absolute time and rebuild with correct delta times
+        processed_messages.sort(key=lambda x: x['absolute_time'])
+        
+        # Create clean track with corrected timing
+        clean_track = MidiTrack()
+        last_time = 0
+        
+        for msg_data in processed_messages:
+            delta = msg_data['absolute_time'] - last_time
+            msg_data['message'].time = delta
+            clean_track.append(msg_data['message'])
+            last_time = msg_data['absolute_time']
+        
+        # STEP 3: Handle final timing
+        final_track_duration = last_time if processed_messages else 0
+        
+        if final_track_duration < target_ticks:
+            # Need to extend
+            remaining_ticks = target_ticks - final_track_duration
+            clean_track.append(Message('control_change', channel=15, control=7, value=0, 
+                                     time=remaining_ticks))
+            print(f"🔧 Extended by {remaining_ticks} ticks to reach 9.6s")
+        elif final_track_duration > target_ticks:
+            print(f"🔪 Truncated from {final_track_duration} to {target_ticks} ticks")
+        else:
+            print(f"✅ Duration already exactly {target_ticks} ticks")
+        
+        # Add final end_of_track
+        clean_track.append(MetaMessage('end_of_track', time=0))
+        
+        # STEP 4: Create final MIDI file
+        final_midi = MidiFile(type=0, ticks_per_beat=midi.ticks_per_beat)
+        final_midi.tracks.append(clean_track)
+        
+        # Save final file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mid') as temp_output:
+            temp_output_path = temp_output.name
+        
+        final_midi.save(temp_output_path)
+        os.unlink(temp_input_path)
+        
+        action = "extended" if original_duration < target_ticks else "truncated" if original_duration > target_ticks else "maintained"
+        print(f"🎯 Successfully {action} MIDI to exactly 9.6s duration")
+        
+        return FileResponse(
+            temp_output_path,
+            media_type='audio/midi',
+            filename='duration_fixed_clean.mid'
+        )
+        
+    except Exception as e:
+        print(f"❌ Duration fix error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # ============================================================================
 # COMPLETE WORKFLOW ENDPOINT
 # ============================================================================
