@@ -103,6 +103,35 @@ import CircularWaveform from "../components/circular_waveform.astro";
                             >
                         </div>
                     </div>
+                    <div
+                        id="loopedTrackPlayer"
+                        class="looped-track-player"
+                        style="display: none;"
+                    >
+                        <midi-player
+                            id="loopedTrackMidiPlayer"
+                            src=""
+                            sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
+                            loop
+                        >
+                        </midi-player>
+                        <div class="looped-track-controls">
+                            <button
+                                onclick="stopLoopedTrack()"
+                                class="mini-midi-btn">⏹️</button
+                            >
+                            <button
+                                onclick="toggleLoopedTrackLoop()"
+                                class="mini-midi-btn">🔄</button
+                            >
+                            <button
+                                onclick="saveLoopedTrack()"
+                                class="mini-midi-btn download-btn"
+                                title="Save 8-Loop Version">💾</button
+                            >
+                            <span class="loop-label">8x Loop</span>
+                        </div>
+                    </div>
 
                     <!-- Arrangement controls in horizontal wrapper -->
                     <div class="arrangement-controls-container">
@@ -275,6 +304,8 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
     let recordedTrackBlob = null;
     let recordedTrackUrl = null;
+    let loopedTrackBlob = null;
+    let loopedTrackUrl = null;
 
     let precisionPlayer = null;
 
@@ -283,6 +314,112 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
     // voice commands
     let voiceCommands = null;
+
+    async function create8LoopMidi(originalMidiBlob) {
+        try {
+            console.log("🔄 Creating 8-loop version...");
+
+            const { Midi } = await import(
+                "https://cdn.skypack.dev/@tonejs/midi"
+            );
+            const arrayBuffer = await originalMidiBlob.arrayBuffer();
+            const originalMidi = new Midi(arrayBuffer);
+
+            // Create new MIDI with proper constructor options
+            const loopedMidi = new Midi();
+
+            // Copy tempo events (this works)
+            if (
+                originalMidi.header.tempos &&
+                originalMidi.header.tempos.length > 0
+            ) {
+                originalMidi.header.tempos.forEach((tempo) => {
+                    loopedMidi.header.setTempo(tempo.bpm, tempo.time);
+                });
+            } else {
+                // Ensure 100 BPM if no tempo found
+                loopedMidi.header.setTempo(100, 0);
+            }
+
+            const singleLoopDuration = 9.6;
+            const totalLoops = 8;
+
+            console.log(
+                `🔄 Creating ${totalLoops} loops from ${originalMidi.tracks.length} tracks`,
+            );
+
+            originalMidi.tracks.forEach((originalTrack, trackIndex) => {
+                const loopedTrack = loopedMidi.addTrack();
+
+                // Copy track properties that are settable
+                if (originalTrack.name)
+                    loopedTrack.name = originalTrack.name + " (8x Loop)";
+                if (originalTrack.channel !== undefined)
+                    loopedTrack.channel = originalTrack.channel;
+
+                let totalNotesAdded = 0;
+
+                for (let loop = 0; loop < totalLoops; loop++) {
+                    const loopStartTime = loop * singleLoopDuration;
+
+                    // Add notes for this loop
+                    originalTrack.notes.forEach((note) => {
+                        if (note.time < singleLoopDuration) {
+                            loopedTrack.addNote({
+                                midi: note.midi,
+                                time: note.time + loopStartTime,
+                                duration: Math.min(
+                                    note.duration,
+                                    singleLoopDuration - note.time,
+                                ),
+                                velocity: note.velocity,
+                            });
+                            totalNotesAdded++;
+                        }
+                    });
+
+                    // Add control changes for this loop
+                    if (originalTrack.controlChanges) {
+                        Object.keys(originalTrack.controlChanges).forEach(
+                            (ccNumber) => {
+                                const ccArray =
+                                    originalTrack.controlChanges[ccNumber];
+                                ccArray.forEach((cc) => {
+                                    if (cc.time < singleLoopDuration) {
+                                        loopedTrack.addCC({
+                                            number: parseInt(ccNumber),
+                                            value: cc.value,
+                                            time: cc.time + loopStartTime,
+                                        });
+                                    }
+                                });
+                            },
+                        );
+                    }
+                }
+
+                console.log(
+                    `🔄 Track ${trackIndex}: ${originalTrack.notes.length} → ${totalNotesAdded} notes (${totalLoops}x)`,
+                );
+            });
+
+            // Convert to blob
+            const loopedMidiArray = loopedMidi.toArray();
+            const loopedMidiBlob = new Blob([loopedMidiArray], {
+                type: "audio/midi",
+            });
+
+            const totalDuration = singleLoopDuration * totalLoops;
+            console.log(
+                `✅ 8-loop MIDI created: ${loopedMidiBlob.size} bytes, ${totalDuration}s duration`,
+            );
+
+            return loopedMidiBlob;
+        } catch (error) {
+            console.error("❌ Failed to create 8-loop MIDI:", error);
+            return null;
+        }
+    }
 
     async function initPrecisionPlayer() {
         if (!precisionPlayer) {
@@ -339,17 +476,6 @@ import CircularWaveform from "../components/circular_waveform.astro";
         // Replace the playStickyMidi function
         window.playStickyMidi = playStickyMidiPrecision;
         window.stopStickyMidi = stopStickyMidiPrecision;
-
-        // Add precision controls to your UI
-        const stickyControls = document.querySelector(".sticky-midi-controls");
-        if (stickyControls) {
-            const precisionBtn = document.createElement("button");
-            precisionBtn.className = "mini-midi-btn";
-            precisionBtn.innerHTML = "🎯";
-            precisionBtn.title = "Precision Mode (9.6s)";
-            precisionBtn.onclick = () => playStickyMidiPrecision();
-            stickyControls.appendChild(precisionBtn);
-        }
     }
 
     function autoConnect() {
@@ -2717,6 +2843,20 @@ import CircularWaveform from "../components/circular_waveform.astro";
             recordedTrackUrl = null;
         }
         recordedTrackBlob = null;
+
+        // 🆕 ADD THESE LINES AT THE END:
+        // Hide looped track player when starting new recording
+        const loopedPlayer = document.getElementById("loopedTrackPlayer");
+        if (loopedPlayer) {
+            loopedPlayer.style.display = "none";
+        }
+
+        // Clean up looped track URLs
+        if (loopedTrackUrl) {
+            URL.revokeObjectURL(loopedTrackUrl);
+            loopedTrackUrl = null;
+        }
+        loopedTrackBlob = null;
     }
 
     function resetRecordingUI() {
@@ -2860,6 +3000,27 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
             const fixedMidiBlob = await fixMidiTempo(originalMidiBlob, 100);
             console.log("🎵 Tempo-fixed MIDI created for playback");
+
+            // 🎵 STEP 3: Create 8-loop version for extended playback
+            updateStatus(
+                "captureStatus",
+                "🔄 Creating 8-loop version...",
+                "analyzing",
+            );
+
+            const loopedMidiBlob = await create8LoopMidi(fixedMidiBlob);
+            if (loopedMidiBlob) {
+                loopedTrackBlob = loopedMidiBlob;
+
+                if (loopedTrackUrl) {
+                    URL.revokeObjectURL(loopedTrackUrl);
+                }
+                loopedTrackUrl = URL.createObjectURL(loopedMidiBlob);
+
+                console.log("🔄 8-loop MIDI created for extended playback");
+            } else {
+                console.log("⚠️ Failed to create 8-loop version, skipping");
+            }
 
             // Use the tempo-fixed MIDI for frontend playback
             recordedTrackBlob = fixedMidiBlob;
@@ -3613,34 +3774,30 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }, 2000);
     });
 
-    // 🎯 Add test button when recorded track player is shown
     function showRecordedTrackPlayer() {
         const recordedPlayer = document.getElementById("recordedTrackPlayer");
         const recordedMidiElement = document.getElementById(
             "recordedTrackMidiPlayer",
         );
+        const loopedPlayer = document.getElementById("loopedTrackPlayer");
+        const loopedMidiElement = document.getElementById(
+            "loopedTrackMidiPlayer",
+        );
 
+        // Show single-loop player
         if (recordedPlayer && recordedMidiElement && recordedTrackUrl) {
             recordedMidiElement.src = recordedTrackUrl;
-
-            // 🎯 FIX: Set playback rate to match 100 BPM (from default 120 BPM)
-            recordedMidiElement.playbackRate = baseBPM / defaultBPM; // 100/120 = 0.833
-
+            recordedMidiElement.playbackRate = baseBPM / defaultBPM;
             recordedPlayer.style.display = "flex";
-            console.log(
-                `🎵 Recorded track player loaded with fixed duration at ${baseBPM} BPM (rate: ${recordedMidiElement.playbackRate.toFixed(3)})`,
-            );
+            console.log("🎵 Single-loop player loaded (9.6s)");
+        }
 
-            // Add test button if not already present
-            setTimeout(() => {
-                if (
-                    !document.querySelector(
-                        '.recorded-track-controls .mini-midi-btn[title="Test 9.6s Duration"]',
-                    )
-                ) {
-                    addDurationTestButton();
-                }
-            }, 100);
+        // Show 8-loop player
+        if (loopedPlayer && loopedMidiElement && loopedTrackUrl) {
+            loopedMidiElement.src = loopedTrackUrl;
+            loopedMidiElement.playbackRate = baseBPM / defaultBPM;
+            loopedPlayer.style.display = "flex";
+            console.log("🔄 8-loop player loaded (76.8s)");
         }
     }
 
@@ -3685,6 +3842,42 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }
     }
 
+    function playLoopedTrack() {
+        const player = document.getElementById("loopedTrackMidiPlayer");
+        if (player && player.src) {
+            player.start();
+            console.log("🔄 Started playing 8-loop track");
+        }
+    }
+
+    function stopLoopedTrack() {
+        const player = document.getElementById("loopedTrackMidiPlayer");
+        if (player) {
+            player.stop();
+            player.currentTime = 0;
+        }
+    }
+
+    function toggleLoopedTrackLoop() {
+        const player = document.getElementById("loopedTrackMidiPlayer");
+        if (player) {
+            player.loop = !player.loop;
+            console.log("8-loop track loop:", player.loop ? "ON" : "OFF");
+        }
+    }
+
+    function saveLoopedTrack() {
+        if (loopedTrackBlob) {
+            const link = document.createElement("a");
+            link.href = loopedTrackUrl;
+            link.download = `recorded_track_8x_loop_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.mid`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            console.log("🔄 Downloading 8-loop track");
+        }
+    }
+
     // Make functions globally accessible
     window.connectDevice = connectDevice;
     window.loadDevices = loadDevices;
@@ -3711,6 +3904,11 @@ import CircularWaveform from "../components/circular_waveform.astro";
     window.stopRecordedTrack = stopRecordedTrack;
     window.toggleRecordedTrackLoop = toggleRecordedTrackLoop;
     window.saveRecordedTrack = saveRecordedTrack;
+
+    window.playLoopedTrack = playLoopedTrack;
+    window.stopLoopedTrack = stopLoopedTrack;
+    window.toggleLoopedTrackLoop = toggleLoopedTrackLoop;
+    window.saveLoopedTrack = saveLoopedTrack;
 </script>
 
 <style>
@@ -4200,7 +4398,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
     /* Sticky MIDI Player - positioned above arrangement controls */
     .sticky-midi-player {
         position: absolute;
-        bottom: 100%;
+        bottom: 360%;
         left: 0;
         margin-bottom: 5px;
         display: flex;
@@ -4281,6 +4479,48 @@ import CircularWaveform from "../components/circular_waveform.astro";
     .recorded-track-controls {
         display: flex;
         gap: 5px;
+    }
+
+    .looped-track-player {
+        position: absolute;
+        bottom: 250%; /* Increased from 180% to move it higher */
+        left: 0;
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 2px solid #e67e22;
+        border-radius: 12px;
+        padding: 6px 10px;
+        max-width: 480px;
+        align-self: flex-start;
+    }
+
+    .looped-track-player midi-player {
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        height: 35px;
+        width: 220px;
+        flex-shrink: 1;
+    }
+
+    .looped-track-controls {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+    }
+
+    .loop-label {
+        font-size: 11px;
+        font-weight: bold;
+        color: #e67e22;
+        background: rgba(230, 126, 34, 0.1);
+        padding: 2px 6px;
+        border-radius: 8px;
+        white-space: nowrap;
     }
 
     .control-group {
