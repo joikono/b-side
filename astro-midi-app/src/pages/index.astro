@@ -104,33 +104,107 @@ import CircularWaveform from "../components/circular_waveform.astro";
                         </div>
                     </div>
                     <div
+                        id="unifiedPlayer"
+                        class="unified-player"
+                        style="display: none;"
+                    >
+                        <div class="unified-player-header">
+                            <span class="unified-label">🎼 Your Song</span>
+                            <div class="track-indicators">
+                                <span
+                                    class="track-indicator user-track"
+                                    id="userTrackIndicator"
+                                    >🎹 Your Recording</span
+                                >
+                                <span
+                                    class="track-indicator arrangement-track"
+                                    id="arrangementTrackIndicator"
+                                    >🎵 Arrangement</span
+                                >
+                            </div>
+                        </div>
+
+                        <div class="unified-controls">
+                            <button
+                                onclick="unifiedPlay()"
+                                class="unified-btn play-btn"
+                                id="unifiedPlayBtn"
+                            >
+                                ▶️ Play
+                            </button>
+                            <button
+                                onclick="unifiedStop()"
+                                class="unified-btn stop-btn"
+                            >
+                                ⏹️ Stop
+                            </button>
+                            <button
+                                onclick="unifiedToggleLoop()"
+                                class="unified-btn loop-btn"
+                                id="unifiedLoopBtn"
+                            >
+                                🔄 Loop: OFF
+                            </button>
+                            <button
+                                onclick="unifiedSave()"
+                                class="unified-btn save-btn"
+                            >
+                                💾 Save
+                            </button>
+                        </div>
+
+                        <div class="unified-progress">
+                            <div class="progress-bar-container">
+                                <div
+                                    class="progress-bar"
+                                    id="unifiedProgressBar"
+                                >
+                                </div>
+                            </div>
+                            <span class="time-display" id="unifiedTimeDisplay"
+                                >0:00 / 0:00</span
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Combined Track Player with Working Toggles -->
+                    <div
                         id="combinedTrackPlayer"
                         class="combined-track-player"
                         style="display: none;"
                     >
-                        <midi-player
-                            id="combinedTrackMidiPlayer"
-                            src=""
-                            sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
-                            loop
-                        >
-                        </midi-player>
+                        <div class="combined-label">🎼 Combined Playback</div>
+
                         <div class="combined-track-controls">
-                            <button
-                                onclick="stopCombinedTrack()"
-                                class="mini-midi-btn">⏹️</button
+                            <midi-player
+                                id="combinedTrackMidiPlayer"
+                                src=""
+                                sound-font="https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
+                                loop
                             >
-                            <button
-                                onclick="toggleCombinedTrackLoop()"
-                                class="mini-midi-btn">🔄</button
-                            >
-                            <button
-                                onclick="saveCombinedTrack()"
-                                class="mini-midi-btn download-btn"
-                                title="Save Combined Track">💾</button
-                            >
-                            <span class="combined-label">Combined</span>
+                            </midi-player>
+
+                            <div class="mini-midi-controls">
+                                <button
+                                    onclick="playCombinedTrack()"
+                                    class="mini-midi-btn">▶️</button
+                                >
+                                <button
+                                    onclick="stopCombinedTrack()"
+                                    class="mini-midi-btn">⏹️</button
+                                >
+                                <button
+                                    onclick="toggleCombinedTrackLoop()"
+                                    class="mini-midi-btn">🔄</button
+                                >
+                                <button
+                                    onclick="saveCombinedTrack()"
+                                    class="mini-midi-btn">💾</button
+                                >
+                            </div>
                         </div>
+
+                        <!-- Track Toggle Controls -->
                         <div class="track-toggles">
                             <label class="track-toggle">
                                 <input
@@ -139,7 +213,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
                                     checked
                                     onchange="toggleUserTrack(this.checked)"
                                 />
-                                <span>Your Recording</span>
+                                <span>🎹 Your Recording</span>
                             </label>
                             <label class="track-toggle">
                                 <input
@@ -148,7 +222,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
                                     checked
                                     onchange="toggleArrangementTrack(this.checked)"
                                 />
-                                <span>Arrangement</span>
+                                <span>🎵 Arrangement</span>
                             </label>
                         </div>
                     </div>
@@ -332,8 +406,258 @@ import CircularWaveform from "../components/circular_waveform.astro";
     // Arrangement controls functionality
     let isArrangementMenuOpen = false;
 
+    let unifiedState = {
+        isPlaying: false,
+        isLooping: false,
+        userPlayer: null,
+        arrangementPlayer: null,
+        syncInterval: null,
+    };
+
     // voice commands
     let voiceCommands = null;
+
+    function initializeUnifiedPlayer() {
+        unifiedState.userPlayer = document.getElementById(
+            "recordedTrackMidiPlayer",
+        );
+        unifiedState.arrangementPlayer = document.getElementById(
+            "stickyArrangementPlayer",
+        );
+
+        if (unifiedState.userPlayer && unifiedState.arrangementPlayer) {
+            console.log("🎼 Unified player initialized with both tracks");
+
+            // Set up event listeners for sync
+            setupPlayerSync();
+
+            // Show the unified player
+            showUnifiedPlayer();
+
+            return true;
+        }
+
+        console.log("⚠️ Unified player: waiting for both tracks...");
+        return false;
+    }
+
+    // Set up synchronization between players
+    function setupPlayerSync() {
+        const userPlayer = unifiedState.userPlayer;
+        const arrangementPlayer = unifiedState.arrangementPlayer;
+
+        // Sync loop settings
+        if (unifiedState.isLooping) {
+            userPlayer.loop = true;
+            arrangementPlayer.loop = true;
+        }
+
+        // Listen for when either player stops to update UI
+        userPlayer.addEventListener("stop", () => {
+            if (unifiedState.isPlaying) {
+                updateUnifiedPlayButton(false);
+            }
+        });
+
+        arrangementPlayer.addEventListener("stop", () => {
+            if (unifiedState.isPlaying) {
+                updateUnifiedPlayButton(false);
+            }
+        });
+    }
+
+    // Unified Play/Pause
+    function unifiedPlay() {
+        const userPlayer = unifiedState.userPlayer;
+        const arrangementPlayer = unifiedState.arrangementPlayer;
+
+        if (!userPlayer || !arrangementPlayer) {
+            console.log("❌ Players not ready");
+            return;
+        }
+
+        if (unifiedState.isPlaying) {
+            // Pause both
+            userPlayer.stop();
+            arrangementPlayer.stop();
+            unifiedState.isPlaying = false;
+            updateUnifiedPlayButton(false);
+            console.log("⏸️ Unified pause");
+        } else {
+            // Play both (with slight delay for sync)
+            userPlayer.start();
+            setTimeout(() => arrangementPlayer.start(), 10); // 10ms sync delay
+            unifiedState.isPlaying = true;
+            updateUnifiedPlayButton(true);
+            console.log("▶️ Unified play");
+
+            // Start progress tracking
+            startProgressTracking();
+        }
+    }
+
+    // Unified Stop
+    function unifiedStop() {
+        const userPlayer = unifiedState.userPlayer;
+        const arrangementPlayer = unifiedState.arrangementPlayer;
+
+        if (userPlayer && arrangementPlayer) {
+            userPlayer.stop();
+            arrangementPlayer.stop();
+
+            // Reset to beginning
+            userPlayer.currentTime = 0;
+            arrangementPlayer.currentTime = 0;
+
+            unifiedState.isPlaying = false;
+            updateUnifiedPlayButton(false);
+            updateProgressDisplay(0, 0);
+
+            console.log("⏹️ Unified stop");
+        }
+    }
+
+    // Unified Loop Toggle
+    function unifiedToggleLoop() {
+        unifiedState.isLooping = !unifiedState.isLooping;
+
+        const userPlayer = unifiedState.userPlayer;
+        const arrangementPlayer = unifiedState.arrangementPlayer;
+
+        if (userPlayer && arrangementPlayer) {
+            userPlayer.loop = unifiedState.isLooping;
+            arrangementPlayer.loop = unifiedState.isLooping;
+
+            updateLoopButton();
+            console.log(
+                `🔄 Unified loop: ${unifiedState.isLooping ? "ON" : "OFF"}`,
+            );
+        }
+    }
+
+    // Unified Save (saves both tracks)
+    function unifiedSave() {
+        // Save user recording
+        if (recordedTrackBlob) {
+            const userLink = document.createElement("a");
+            userLink.href = recordedTrackUrl;
+            userLink.download = `your_recording_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.mid`;
+            document.body.appendChild(userLink);
+            userLink.click();
+            document.body.removeChild(userLink);
+        }
+
+        // Save arrangement
+        const arrangementPlayer = unifiedState.arrangementPlayer;
+        if (arrangementPlayer && arrangementPlayer.src) {
+            const filename = arrangementPlayer.src.split("/").pop();
+            const arrangementLink = document.createElement("a");
+            arrangementLink.href = arrangementPlayer.src;
+            arrangementLink.download = `arrangement_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.mid`;
+            document.body.appendChild(arrangementLink);
+            arrangementLink.click();
+            document.body.removeChild(arrangementLink);
+        }
+
+        console.log("💾 Saved both tracks separately");
+    }
+
+    // Update play button appearance
+    function updateUnifiedPlayButton(playing) {
+        const playBtn = document.getElementById("unifiedPlayBtn");
+        if (playBtn) {
+            playBtn.textContent = playing ? "⏸️ Pause" : "▶️ Play";
+            playBtn.classList.toggle("playing", playing);
+        }
+    }
+
+    // Update loop button appearance
+    function updateLoopButton() {
+        const loopBtn = document.getElementById("unifiedLoopBtn");
+        if (loopBtn) {
+            loopBtn.textContent = `🔄 Loop: ${unifiedState.isLooping ? "ON" : "OFF"}`;
+            loopBtn.classList.toggle("active", unifiedState.isLooping);
+        }
+    }
+
+    // Progress tracking
+    function startProgressTracking() {
+        if (unifiedState.syncInterval) {
+            clearInterval(unifiedState.syncInterval);
+        }
+
+        unifiedState.syncInterval = setInterval(() => {
+            const arrangementPlayer = unifiedState.arrangementPlayer;
+            if (arrangementPlayer && unifiedState.isPlaying) {
+                const currentTime = arrangementPlayer.currentTime || 0;
+                const duration = arrangementPlayer.duration || 76.8; // Typical arrangement length
+                updateProgressDisplay(currentTime, duration);
+            }
+        }, 100); // Update every 100ms
+    }
+
+    // Update progress bar and time display
+    function updateProgressDisplay(currentTime, duration) {
+        const progressBar = document.getElementById("unifiedProgressBar");
+        const timeDisplay = document.getElementById("unifiedTimeDisplay");
+
+        if (progressBar && duration > 0) {
+            const percentage = (currentTime / duration) * 100;
+            progressBar.style.width = `${Math.min(percentage, 100)}%`;
+        }
+
+        if (timeDisplay) {
+            const current = formatTime(currentTime);
+            const total = formatTime(duration);
+            timeDisplay.textContent = `${current} / ${total}`;
+        }
+    }
+
+    // Format time as MM:SS
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+    }
+
+    // Show unified player
+    function showUnifiedPlayer() {
+        const unifiedPlayer = document.getElementById("unifiedPlayer");
+        if (unifiedPlayer) {
+            unifiedPlayer.style.display = "flex";
+
+            // Hide individual players (optional - keep them but hidden)
+            const recordedPlayer = document.getElementById(
+                "recordedTrackPlayer",
+            );
+            const stickyPlayer = document.getElementById("stickyMidiPlayer");
+
+            if (recordedPlayer) recordedPlayer.style.display = "none";
+            if (stickyPlayer) stickyPlayer.style.display = "none";
+
+            console.log("🎼 Unified player interface shown");
+        }
+    }
+
+    // Clean up on new recording
+    function hideUnifiedPlayer() {
+        const unifiedPlayer = document.getElementById("unifiedPlayer");
+        if (unifiedPlayer) {
+            unifiedPlayer.style.display = "none";
+        }
+
+        // Clear sync interval
+        if (unifiedState.syncInterval) {
+            clearInterval(unifiedState.syncInterval);
+            unifiedState.syncInterval = null;
+        }
+
+        // Reset state
+        unifiedState.isPlaying = false;
+        unifiedState.isLooping = false;
+        unifiedState.userPlayer = null;
+        unifiedState.arrangementPlayer = null;
+    }
 
     async function create8LoopMidi(originalMidiBlob) {
         try {
@@ -733,6 +1057,236 @@ import CircularWaveform from "../components/circular_waveform.astro";
         return false;
     }
 
+    // 🔧 SIMPLE & SAFE: Just append user recording to arrangement without changing anything
+    async function simpleCombineMidi(userMidiBlob, arrangementMidiBlob) {
+        try {
+            console.log(
+                "🎼 Simple combine: Adding user recording to arrangement...",
+            );
+
+            const { Midi } = await import(
+                "https://cdn.skypack.dev/@tonejs/midi"
+            );
+
+            // Parse both files
+            const userArrayBuffer = await userMidiBlob.arrayBuffer();
+            const arrangementArrayBuffer =
+                await arrangementMidiBlob.arrayBuffer();
+
+            const userMidi = new Midi(userArrayBuffer);
+            const arrangementMidi = new Midi(arrangementArrayBuffer);
+
+            // 🎯 KEY: Start with the arrangement MIDI exactly as-is
+            const combinedMidi = new Midi(arrangementArrayBuffer); // Clone the arrangement
+
+            console.log(
+                `🎼 Starting with arrangement (${arrangementMidi.tracks.length} tracks)`,
+            );
+            console.log(
+                `🎼 Adding user recording (${userMidi.tracks.length} tracks)`,
+            );
+
+            // 🔄 First: Create 8x looped user recording
+            const singleLoopDuration = 9.6; // 16 beats at 100 BPM
+            const totalLoops = 8;
+
+            // Add user tracks as NEW tracks (don't modify existing arrangement tracks)
+            userMidi.tracks.forEach((userTrack, index) => {
+                const newUserTrack = combinedMidi.addTrack();
+                newUserTrack.name = `User Recording ${index + 1} (8x Loop)`;
+                newUserTrack.channel = 0; // Safe channel for user
+
+                console.log(
+                    `🔄 Creating 8-loop user track: ${newUserTrack.name}`,
+                );
+
+                // Add 8 loops of the user recording
+                for (let loop = 0; loop < totalLoops; loop++) {
+                    const loopStartTime = loop * singleLoopDuration;
+
+                    userTrack.notes.forEach((note) => {
+                        if (note.time < singleLoopDuration) {
+                            newUserTrack.addNote({
+                                midi: note.midi,
+                                time: note.time + loopStartTime,
+                                duration: Math.min(
+                                    note.duration,
+                                    singleLoopDuration - note.time,
+                                ),
+                                velocity: note.velocity,
+                            });
+                        }
+                    });
+
+                    // Copy control changes for each loop
+                    if (userTrack.controlChanges) {
+                        Object.keys(userTrack.controlChanges).forEach(
+                            (ccNumber) => {
+                                userTrack.controlChanges[ccNumber].forEach(
+                                    (cc) => {
+                                        if (cc.time < singleLoopDuration) {
+                                            newUserTrack.addCC({
+                                                number: parseInt(ccNumber),
+                                                value: cc.value,
+                                                time: cc.time + loopStartTime,
+                                            });
+                                        }
+                                    },
+                                );
+                            },
+                        );
+                    }
+                }
+            });
+
+            // Convert to blob
+            const combinedArray = combinedMidi.toArray();
+            const combinedBlob = new Blob([combinedArray], {
+                type: "audio/midi",
+            });
+
+            console.log(`✅ Simple combined MIDI: ${combinedBlob.size} bytes`);
+            console.log(
+                `🎼 Total tracks: ${combinedMidi.tracks.length} (arrangement preserved + user added)`,
+            );
+
+            return {
+                blob: combinedBlob,
+                trackCount: combinedMidi.tracks.length,
+                userTracks: userMidi.tracks.length,
+                arrangementTracks: arrangementMidi.tracks.length,
+            };
+        } catch (error) {
+            console.error("❌ Simple combine failed:", error);
+            return null;
+        }
+    }
+
+    // 🔧 WORKING SOLUTION: Single player with toggle using different MIDI files
+    async function createWorkingToggleSystem(
+        userMidiBlob,
+        arrangementMidiBlob,
+    ) {
+        try {
+            console.log("🎛️ Creating working toggle system...");
+
+            // 1. Create 8x looped user-only MIDI
+            const loopedUserBlob = await create8LoopUserRecording(userMidiBlob);
+
+            // 2. Create simple combined MIDI (arrangement + 8x user)
+            const combinedResult = await simpleCombineMidi(
+                userMidiBlob,
+                arrangementMidiBlob,
+            );
+
+            if (!combinedResult) {
+                throw new Error("Failed to create combined MIDI");
+            }
+
+            // 3. Store all three variations
+            window.midiVariations = {
+                combined: combinedResult.blob, // Arrangement + 8x User
+                userOnly: loopedUserBlob, // 8x User only
+                arrangementOnly: arrangementMidiBlob, // Arrangement only
+            };
+
+            // 4. Create URLs
+            window.midiUrls = {
+                combined: URL.createObjectURL(combinedResult.blob),
+                userOnly: URL.createObjectURL(loopedUserBlob),
+                arrangementOnly: URL.createObjectURL(arrangementMidiBlob),
+            };
+
+            console.log("✅ Toggle system ready with 3 MIDI variations");
+            return combinedResult;
+        } catch (error) {
+            console.error("❌ Toggle system creation failed:", error);
+            return null;
+        }
+    }
+
+    // 🔧 SIMPLIFIED: Show single player with working toggles
+    function showWorkingCombinedPlayer() {
+        const combinedPlayer = document.getElementById("combinedTrackPlayer");
+        const combinedMidiElement = document.getElementById(
+            "combinedTrackMidiPlayer",
+        );
+
+        if (combinedPlayer && combinedMidiElement && window.midiUrls) {
+            // Start with combined (both tracks)
+            combinedMidiElement.src = window.midiUrls.combined;
+            combinedPlayer.style.display = "flex";
+
+            // Reset checkboxes to both checked
+            document.getElementById("userTrackToggle").checked = true;
+            document.getElementById("arrangementTrackToggle").checked = true;
+
+            console.log("🎼 Working combined player shown");
+        }
+    }
+
+    // 🔧 WORKING: Update player source based on checkboxes
+    function updateWorkingPlayerSource() {
+        const userChecked = document.getElementById("userTrackToggle").checked;
+        const arrangementChecked = document.getElementById(
+            "arrangementTrackToggle",
+        ).checked;
+        const player = document.getElementById("combinedTrackMidiPlayer");
+
+        if (!player || !window.midiUrls) return;
+
+        let newSrc = "";
+        let description = "";
+
+        if (userChecked && arrangementChecked) {
+            newSrc = window.midiUrls.combined;
+            description = "Combined (User 8x + Arrangement)";
+        } else if (userChecked && !arrangementChecked) {
+            newSrc = window.midiUrls.userOnly;
+            description = "User Recording Only (8x Loop)";
+        } else if (!userChecked && arrangementChecked) {
+            newSrc = window.midiUrls.arrangementOnly;
+            description = "Arrangement Only";
+        } else {
+            player.stop();
+            console.log("🎛️ Both tracks disabled - stopping playback");
+            return;
+        }
+
+        // Check if source actually needs to change
+        if (player.src === newSrc) {
+            console.log("🎛️ Source unchanged:", description);
+            return;
+        }
+
+        // Update source
+        const wasPlaying = player.playing;
+        const currentTime = player.currentTime || 0;
+
+        player.stop();
+        player.src = newSrc;
+
+        console.log("🎛️ Switched to:", description);
+
+        // Restart if it was playing
+        if (wasPlaying) {
+            setTimeout(() => {
+                player.currentTime = currentTime;
+                player.start();
+            }, 100);
+        }
+    }
+
+    // 🔧 UPDATE: Toggle functions to use working system
+    function toggleUserTrack(enabled) {
+        console.log(`🎵 User track ${enabled ? "enabled" : "disabled"}`);
+        updateWorkingPlayerSource();
+    }
+
+    function toggleArrangementTrack(enabled) {
+        console.log(`🎼 Arrangement track ${enabled ? "enabled" : "disabled"}`);
+        updateWorkingPlayerSource();
+    }
     async function connectDevice() {
         const deviceSelect = document.getElementById("deviceSelect");
         if (!deviceSelect) return;
@@ -820,6 +1374,333 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 "error",
             );
             updateMidiBarStatus("error", "Connection failed"); // NEW LINE FOR STICKY BAR
+        }
+    }
+
+    // 🔧 FIXED: Function to loop user recording 8 times
+    async function create8LoopUserRecording(originalMidiBlob) {
+        try {
+            console.log("🔄 Creating 8-loop version of user recording...");
+
+            const { Midi } = await import(
+                "https://cdn.skypack.dev/@tonejs/midi"
+            );
+            const arrayBuffer = await originalMidiBlob.arrayBuffer();
+            const originalMidi = new Midi(arrayBuffer);
+
+            // Create new MIDI with proper constructor options
+            const loopedMidi = new Midi();
+
+            // Copy tempo events
+            if (
+                originalMidi.header.tempos &&
+                originalMidi.header.tempos.length > 0
+            ) {
+                originalMidi.header.tempos.forEach((tempo) => {
+                    loopedMidi.header.setTempo(tempo.bpm, tempo.time);
+                });
+            } else {
+                loopedMidi.header.setTempo(100, 0);
+            }
+
+            const singleLoopDuration = 9.6; // 16 beats at 100 BPM
+            const totalLoops = 8;
+
+            console.log(`🔄 Creating ${totalLoops} loops of user recording`);
+
+            originalMidi.tracks.forEach((originalTrack, trackIndex) => {
+                const loopedTrack = loopedMidi.addTrack();
+
+                if (originalTrack.name)
+                    loopedTrack.name = originalTrack.name + " (8x Loop)";
+                if (originalTrack.channel !== undefined)
+                    loopedTrack.channel = originalTrack.channel;
+
+                let totalNotesAdded = 0;
+
+                for (let loop = 0; loop < totalLoops; loop++) {
+                    const loopStartTime = loop * singleLoopDuration;
+
+                    // Add notes for this loop
+                    originalTrack.notes.forEach((note) => {
+                        if (note.time < singleLoopDuration) {
+                            loopedTrack.addNote({
+                                midi: note.midi,
+                                time: note.time + loopStartTime,
+                                duration: Math.min(
+                                    note.duration,
+                                    singleLoopDuration - note.time,
+                                ),
+                                velocity: note.velocity,
+                            });
+                            totalNotesAdded++;
+                        }
+                    });
+
+                    // Add control changes for this loop
+                    if (originalTrack.controlChanges) {
+                        Object.keys(originalTrack.controlChanges).forEach(
+                            (ccNumber) => {
+                                const ccArray =
+                                    originalTrack.controlChanges[ccNumber];
+                                ccArray.forEach((cc) => {
+                                    if (cc.time < singleLoopDuration) {
+                                        loopedTrack.addCC({
+                                            number: parseInt(ccNumber),
+                                            value: cc.value,
+                                            time: cc.time + loopStartTime,
+                                        });
+                                    }
+                                });
+                            },
+                        );
+                    }
+                }
+
+                console.log(
+                    `🔄 Track ${trackIndex}: ${originalTrack.notes.length} → ${totalNotesAdded} notes (${totalLoops}x)`,
+                );
+            });
+
+            // Convert to blob
+            const loopedMidiArray = loopedMidi.toArray();
+            const loopedMidiBlob = new Blob([loopedMidiArray], {
+                type: "audio/midi",
+            });
+
+            const totalDuration = singleLoopDuration * totalLoops;
+            console.log(
+                `✅ 8-loop user recording created: ${loopedMidiBlob.size} bytes, ${totalDuration}s duration`,
+            );
+
+            return loopedMidiBlob;
+        } catch (error) {
+            console.error("❌ Failed to create 8-loop user recording:", error);
+            return originalMidiBlob; // Fallback to original
+        }
+    }
+
+    // 🔧 FIXED: Function to combine user recording with arrangement - NOW WITH 8x LOOPED USER TRACK
+    async function combineMidiFiles(userMidiBlob, arrangementMidiBlob) {
+        try {
+            console.log(
+                "🎼 Combining 8x looped user recording with arrangement...",
+            );
+
+            // 🔄 STEP 1: Create 8x looped version of user recording
+            const loopedUserBlob = await create8LoopUserRecording(userMidiBlob);
+
+            const { Midi } = await import(
+                "https://cdn.skypack.dev/@tonejs/midi"
+            );
+
+            // Parse both MIDI files (now using looped user recording)
+            const userArrayBuffer = await loopedUserBlob.arrayBuffer();
+            const arrangementArrayBuffer =
+                await arrangementMidiBlob.arrayBuffer();
+
+            const userMidi = new Midi(userArrayBuffer);
+            const arrangementMidi = new Midi(arrangementArrayBuffer);
+
+            // Create new combined MIDI
+            const combinedMidi = new Midi();
+
+            // Set tempo to 100 BPM
+            combinedMidi.header.setTempo(100, 0);
+
+            console.log(
+                `🎼 8x Looped User tracks: ${userMidi.tracks.length}, Arrangement tracks: ${arrangementMidi.tracks.length}`,
+            );
+
+            // Add 8x looped user tracks first (Track 0 will be user input)
+            userMidi.tracks.forEach((track, index) => {
+                const combinedTrack = combinedMidi.addTrack();
+                combinedTrack.name = `User Recording 8x Loop ${index + 1}`;
+                combinedTrack.channel = 0; // User on channel 0
+
+                // Copy all notes from 8x looped version
+                track.notes.forEach((note) => {
+                    combinedTrack.addNote({
+                        midi: note.midi,
+                        time: note.time,
+                        duration: note.duration,
+                        velocity: note.velocity,
+                    });
+                });
+
+                // Copy control changes if any
+                if (track.controlChanges) {
+                    Object.keys(track.controlChanges).forEach((ccNumber) => {
+                        track.controlChanges[ccNumber].forEach((cc) => {
+                            combinedTrack.addCC({
+                                number: parseInt(ccNumber),
+                                value: cc.value,
+                                time: cc.time,
+                            });
+                        });
+                    });
+                }
+            });
+
+            // Add arrangement tracks PRESERVING original channels and instruments
+            arrangementMidi.tracks.forEach((track, index) => {
+                const combinedTrack = combinedMidi.addTrack();
+                combinedTrack.name = track.name || `Arrangement ${index + 1}`;
+
+                // Keep original channel assignment
+                combinedTrack.channel = track.channel;
+
+                console.log(
+                    `🔧 Track "${combinedTrack.name}" using original channel: ${track.channel}`,
+                );
+
+                // Copy all notes
+                track.notes.forEach((note) => {
+                    combinedTrack.addNote({
+                        midi: note.midi,
+                        time: note.time,
+                        duration: note.duration,
+                        velocity: note.velocity,
+                    });
+                });
+
+                // Copy ALL control changes (including program changes for instruments)
+                if (track.controlChanges) {
+                    Object.keys(track.controlChanges).forEach((ccNumber) => {
+                        track.controlChanges[ccNumber].forEach((cc) => {
+                            combinedTrack.addCC({
+                                number: parseInt(ccNumber),
+                                value: cc.value,
+                                time: cc.time,
+                            });
+                        });
+                    });
+                }
+
+                // Copy program changes (instrument selections)
+                if (track.instrument) {
+                    combinedTrack.instrument = track.instrument;
+                }
+            });
+
+            // Convert to blob
+            const combinedArray = combinedMidi.toArray();
+            const combinedBlob = new Blob([combinedArray], {
+                type: "audio/midi",
+            });
+
+            console.log(
+                `✅ Combined MIDI created with 8x looped user track: ${combinedBlob.size} bytes, ${combinedMidi.tracks.length} tracks`,
+            );
+
+            return {
+                blob: combinedBlob,
+                trackCount: combinedMidi.tracks.length,
+                userTracks: userMidi.tracks.length,
+                arrangementTracks: arrangementMidi.tracks.length,
+                loopedUserBlob: loopedUserBlob, // Return this for separate user-only playback
+            };
+        } catch (error) {
+            console.error("❌ Failed to combine MIDI files:", error);
+            return null;
+        }
+    }
+
+    // 🔧 FIXED: Create separate MIDI files for toggle functionality
+    async function createToggleMidiFiles(
+        userMidiBlob,
+        arrangementMidiBlob,
+        combinedResult,
+    ) {
+        try {
+            // Store all variations
+            window.midiVariations = {
+                combined: combinedResult.blob,
+                userOnly: combinedResult.loopedUserBlob, // 8x looped user recording
+                arrangementOnly: arrangementMidiBlob,
+            };
+
+            // Create URLs for all variations
+            window.midiUrls = {
+                combined: URL.createObjectURL(combinedResult.blob),
+                userOnly: URL.createObjectURL(combinedResult.loopedUserBlob),
+                arrangementOnly: URL.createObjectURL(arrangementMidiBlob),
+            };
+
+            console.log(
+                "🎛️ Created toggle MIDI variations: combined, userOnly, arrangementOnly",
+            );
+            return true;
+        } catch (error) {
+            console.error("❌ Failed to create toggle MIDI files:", error);
+            return false;
+        }
+    }
+
+    // 🔧 FIXED: Track Toggle Functions - Now swaps MIDI files instead of muting
+    function updateCombinedPlayerSource() {
+        const userChecked = document.getElementById("userTrackToggle").checked;
+        const arrangementChecked = document.getElementById(
+            "arrangementTrackToggle",
+        ).checked;
+        const player = document.getElementById("combinedTrackMidiPlayer");
+
+        if (!player || !window.midiUrls) return;
+
+        let newSrc = "";
+
+        if (userChecked && arrangementChecked) {
+            // Both enabled - use combined
+            newSrc = window.midiUrls.combined;
+            console.log("🎛️ Playing: Combined (User + Arrangement)");
+        } else if (userChecked && !arrangementChecked) {
+            // Only user - use 8x looped user recording
+            newSrc = window.midiUrls.userOnly;
+            console.log("🎛️ Playing: User Recording Only (8x Loop)");
+        } else if (!userChecked && arrangementChecked) {
+            // Only arrangement
+            newSrc = window.midiUrls.arrangementOnly;
+            console.log("🎛️ Playing: Arrangement Only");
+        } else {
+            // Neither - stop playback
+            player.stop();
+            console.log("🎛️ Both tracks disabled - stopping playback");
+            return;
+        }
+
+        // Update player source
+        const wasPlaying = player.playing;
+        const currentTime = player.currentTime || 0;
+
+        player.stop();
+        player.src = newSrc;
+
+        // Restart if it was playing
+        if (wasPlaying) {
+            // Small delay to ensure new source loads
+            setTimeout(() => {
+                player.currentTime = currentTime;
+                player.start();
+            }, 100);
+        }
+    }
+
+    // 🔧 FIXED: Update showCombinedPlayer to create toggle files
+    function showCombinedPlayer() {
+        const combinedPlayer = document.getElementById("combinedTrackPlayer");
+        const combinedMidiElement = document.getElementById(
+            "combinedTrackMidiPlayer",
+        );
+
+        if (combinedPlayer && combinedMidiElement && window.combinedMidiUrl) {
+            combinedMidiElement.src = window.combinedMidiUrl;
+            combinedPlayer.style.display = "flex";
+
+            // Reset checkboxes to both checked
+            document.getElementById("userTrackToggle").checked = true;
+            document.getElementById("arrangementTrackToggle").checked = true;
+
+            console.log("🎼 Combined player shown with both tracks enabled");
         }
     }
 
@@ -2891,6 +3772,8 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }
         window.combinedMidiBlob = null;
         window.combinedTrackInfo = null;
+        // 🆕 ADD THIS LINE AT THE END:
+        hideUnifiedPlayer();
     }
 
     function resetRecordingUI() {
@@ -3523,11 +4406,12 @@ import CircularWaveform from "../components/circular_waveform.astro";
                     "🔧 DEBUG: recordedTrackBlob size:",
                     recordedTrackBlob?.size,
                 );
-                // NEW: Create combined MIDI if we have a user recording
+                // NEW: Initialize unified player if we have a user recording
+                // NEW: Create working toggle system if we have a user recording
                 if (recordedTrackBlob) {
                     updateStatus(
                         "captureStatus",
-                        "🎼 Creating combined playback...",
+                        "🎼 Creating toggle system...",
                         "analyzing",
                     );
 
@@ -3555,35 +4439,34 @@ import CircularWaveform from "../components/circular_waveform.astro";
                                 "bytes",
                             );
 
-                            await debugArrangementChannels(arrangementBlob);
-
-                            const combinedResult = await combineMidiFiles(
-                                recordedTrackBlob,
-                                arrangementBlob,
-                            );
-
-                            if (combinedResult) {
-                                // Store combined MIDI
-                                window.combinedMidiBlob = combinedResult.blob;
-                                window.combinedMidiUrl = URL.createObjectURL(
-                                    combinedResult.blob,
-                                );
-                                window.combinedTrackInfo = combinedResult;
-
-                                console.log(
-                                    "🎼 Combined MIDI created:",
-                                    combinedResult,
+                            const toggleResult =
+                                await createWorkingToggleSystem(
+                                    recordedTrackBlob,
+                                    arrangementBlob,
                                 );
 
-                                // Show combined player
-                                showCombinedPlayer();
+                            if (toggleResult) {
+                                // Store for the UI
+                                window.combinedMidiBlob = toggleResult.blob;
+                                window.combinedMidiUrl =
+                                    window.midiUrls.combined;
+                                window.combinedTrackInfo = toggleResult;
+
+                                // Show working combined player
+                                showWorkingCombinedPlayer();
 
                                 console.log(
-                                    `🎼 Combined player ready: ${combinedResult.userTracks} user tracks + ${combinedResult.arrangementTracks} arrangement tracks`,
+                                    `🎼 Working toggle system ready: ${toggleResult.userTracks} user + ${toggleResult.arrangementTracks} arrangement tracks`,
+                                );
+
+                                updateStatus(
+                                    "captureStatus",
+                                    "✅ Toggle system ready!",
+                                    "ready",
                                 );
                             } else {
                                 console.error(
-                                    "❌ Failed to combine MIDI files",
+                                    "❌ Failed to create toggle system",
                                 );
                             }
                         } else {
@@ -3594,7 +4477,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
                         }
                     } catch (error) {
                         console.error(
-                            "❌ Failed to create combined MIDI:",
+                            "❌ Failed to create toggle system:",
                             error,
                         );
                     }
@@ -3997,129 +4880,6 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }
     }
 
-    // NEW: Function to combine user recording with arrangement
-    async function combineMidiFiles(userMidiBlob, arrangementMidiBlob) {
-        try {
-            console.log("🎼 Combining user recording with arrangement...");
-
-            const { Midi } = await import(
-                "https://cdn.skypack.dev/@tonejs/midi"
-            );
-
-            // Parse both MIDI files
-            const userArrayBuffer = await userMidiBlob.arrayBuffer();
-            const arrangementArrayBuffer =
-                await arrangementMidiBlob.arrayBuffer();
-
-            const userMidi = new Midi(userArrayBuffer);
-            const arrangementMidi = new Midi(arrangementArrayBuffer);
-
-            // Create new combined MIDI
-            const combinedMidi = new Midi();
-
-            // Set tempo to 100 BPM
-            combinedMidi.header.setTempo(100, 0);
-
-            console.log(
-                `🎼 User tracks: ${userMidi.tracks.length}, Arrangement tracks: ${arrangementMidi.tracks.length}`,
-            );
-
-            // Add user tracks first (Track 0 will be user input)
-            userMidi.tracks.forEach((track, index) => {
-                const combinedTrack = combinedMidi.addTrack();
-                combinedTrack.name = `User Recording ${index + 1}`;
-                combinedTrack.channel = 0; // User on channel 0
-
-                // Copy all notes
-                track.notes.forEach((note) => {
-                    combinedTrack.addNote({
-                        midi: note.midi,
-                        time: note.time,
-                        duration: note.duration,
-                        velocity: note.velocity,
-                    });
-                });
-
-                // Copy control changes if any
-                if (track.controlChanges) {
-                    Object.keys(track.controlChanges).forEach((ccNumber) => {
-                        track.controlChanges[ccNumber].forEach((cc) => {
-                            combinedTrack.addCC({
-                                number: parseInt(ccNumber),
-                                value: cc.value,
-                                time: cc.time,
-                            });
-                        });
-                    });
-                }
-            });
-
-            // 🔧 FIXED: Add arrangement tracks PRESERVING original channels and instruments
-            arrangementMidi.tracks.forEach((track, index) => {
-                const combinedTrack = combinedMidi.addTrack();
-                combinedTrack.name = track.name || `Arrangement ${index + 1}`;
-
-                // 🎯 CRITICAL FIX: Keep original channel assignment!
-                combinedTrack.channel = track.channel;
-
-                console.log(
-                    `🔧 Track "${combinedTrack.name}" using original channel: ${track.channel}`,
-                );
-
-                // Copy all notes
-                track.notes.forEach((note) => {
-                    combinedTrack.addNote({
-                        midi: note.midi,
-                        time: note.time,
-                        duration: note.duration,
-                        velocity: note.velocity,
-                    });
-                });
-
-                // 🎯 CRITICAL: Copy ALL control changes (including program changes for instruments)
-                if (track.controlChanges) {
-                    Object.keys(track.controlChanges).forEach((ccNumber) => {
-                        track.controlChanges[ccNumber].forEach((cc) => {
-                            combinedTrack.addCC({
-                                number: parseInt(ccNumber),
-                                value: cc.value,
-                                time: cc.time,
-                            });
-                        });
-                    });
-                }
-
-                // 🎯 CRITICAL: Copy program changes (instrument selections)
-                if (track.instrument) {
-                    combinedTrack.instrument = track.instrument;
-                }
-            });
-
-            // Convert to blob
-            const combinedArray = combinedMidi.toArray();
-            const combinedBlob = new Blob([combinedArray], {
-                type: "audio/midi",
-            });
-
-            console.log(
-                `✅ Combined MIDI created: ${combinedBlob.size} bytes, ${combinedMidi.tracks.length} tracks`,
-            );
-            console.log(
-                `🎼 Channel assignments preserved from original arrangement`,
-            );
-
-            return {
-                blob: combinedBlob,
-                trackCount: combinedMidi.tracks.length,
-                userTracks: userMidi.tracks.length,
-                arrangementTracks: arrangementMidi.tracks.length,
-            };
-        } catch (error) {
-            console.error("❌ Failed to combine MIDI files:", error);
-            return null;
-        }
-    }
-
     // 🔍 DEBUG: Add this function to inspect arrangement structure
     async function debugArrangementChannels(arrangementBlob) {
         try {
@@ -4142,25 +4902,6 @@ import CircularWaveform from "../components/circular_waveform.astro";
             });
         } catch (error) {
             console.error("Debug failed:", error);
-        }
-    }
-
-    // Combined Player Functions
-    function showCombinedPlayer() {
-        const combinedPlayer = document.getElementById("combinedTrackPlayer");
-        const combinedMidiElement = document.getElementById(
-            "combinedTrackMidiPlayer",
-        );
-
-        if (combinedPlayer && combinedMidiElement && window.combinedMidiUrl) {
-            combinedMidiElement.src = window.combinedMidiUrl;
-            combinedPlayer.style.display = "flex";
-
-            // Reset checkboxes to both checked
-            document.getElementById("userTrackToggle").checked = true;
-            document.getElementById("arrangementTrackToggle").checked = true;
-
-            console.log("🎼 Combined player shown with both tracks enabled");
         }
     }
 
@@ -4200,44 +4941,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
         }
     }
 
-    // Track Toggle Functions
-    function toggleUserTrack(enabled) {
-        const player = document.getElementById("combinedTrackMidiPlayer");
-        if (player && player.tracks) {
-            // User tracks are typically the first tracks (0-based indexing)
-            const userTrackCount = window.combinedTrackInfo?.userTracks || 1;
-
-            for (let i = 0; i < userTrackCount; i++) {
-                if (player.tracks[i]) {
-                    player.tracks[i].mute = !enabled;
-                }
-            }
-
-            console.log(`🎵 User tracks ${enabled ? "enabled" : "muted"}`);
-        }
-    }
-
-    function toggleArrangementTrack(enabled) {
-        const player = document.getElementById("combinedTrackMidiPlayer");
-        if (player && player.tracks) {
-            // Arrangement tracks come after user tracks
-            const userTrackCount = window.combinedTrackInfo?.userTracks || 1;
-            const totalTracks =
-                window.combinedTrackInfo?.trackCount || player.tracks.length;
-
-            for (let i = userTrackCount; i < totalTracks; i++) {
-                if (player.tracks[i]) {
-                    player.tracks[i].mute = !enabled;
-                }
-            }
-
-            console.log(
-                `🎼 Arrangement tracks ${enabled ? "enabled" : "muted"}`,
-            );
-        }
-    }
-
-    // Make functions globally accessible
+    // Global exports
     window.connectDevice = connectDevice;
     window.loadDevices = loadDevices;
     window.startCapture = startCapture;
@@ -4275,9 +4979,158 @@ import CircularWaveform from "../components/circular_waveform.astro";
     window.saveCombinedTrack = saveCombinedTrack;
     window.toggleUserTrack = toggleUserTrack;
     window.toggleArrangementTrack = toggleArrangementTrack;
+
+    window.unifiedPlay = unifiedPlay;
+    window.unifiedStop = unifiedStop;
+    window.unifiedToggleLoop = unifiedToggleLoop;
+    window.unifiedSave = unifiedSave;
+
+    // Update your existing toggle functions
+    window.updateWorkingPlayerSource = updateWorkingPlayerSource; // NEW
+
+    window.showWorkingCombinedPlayer = showWorkingCombinedPlayer;
+    window.updateWorkingPlayerSource = updateWorkingPlayerSource;
 </script>
 
 <style>
+    /* Unified Player Styles */
+    .unified-player {
+        position: absolute;
+        bottom: 360%;
+        left: 0;
+        margin-bottom: 5px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        background: linear-gradient(
+            135deg,
+            rgba(52, 152, 219, 0.95),
+            rgba(155, 89, 182, 0.95)
+        );
+        border: 2px solid #3498db;
+        border-radius: 15px;
+        padding: 15px;
+        max-width: 520px;
+        align-self: flex-start;
+        box-shadow: 0 4px 20px rgba(52, 152, 219, 0.4);
+        color: white;
+    }
+
+    .unified-player-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 5px;
+    }
+
+    .unified-label {
+        font-size: 16px;
+        font-weight: bold;
+        color: white;
+    }
+
+    .track-indicators {
+        display: flex;
+        gap: 10px;
+    }
+
+    .track-indicator {
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .unified-controls {
+        display: flex;
+        gap: 10px;
+        justify-content: space-between;
+    }
+
+    .unified-btn {
+        flex: 1;
+        padding: 12px 8px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .unified-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+    }
+
+    .unified-btn.playing {
+        background: rgba(231, 76, 60, 0.3);
+        border-color: #e74c3c;
+    }
+
+    .unified-btn.active {
+        background: rgba(39, 174, 96, 0.3);
+        border-color: #27ae60;
+    }
+
+    .unified-progress {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .progress-bar-container {
+        flex: 1;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #27ae60, #2ecc71);
+        border-radius: 3px;
+        width: 0%;
+        transition: width 0.1s ease;
+    }
+
+    .time-display {
+        font-size: 12px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.9);
+        min-width: 80px;
+        text-align: righ t;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+        .unified-player {
+            max-width: 300px;
+            bottom: 300%;
+        }
+
+        .unified-controls {
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .unified-btn {
+            flex: 1 1 45%;
+            padding: 10px 6px;
+            font-size: 12px;
+        }
+
+        .track-indicators {
+            flex-direction: column;
+            gap: 5px;
+        }
+    }
     .circular-spectrum-container {
         margin: -50px !important;
         width: calc(100vw + 100px) !important;
