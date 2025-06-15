@@ -177,14 +177,20 @@
     .waveform-centerpiece {
         position: fixed;
         top: 0;
+        /* Keep at 0 */
         left: 0;
         width: 100vw;
         height: 100vh;
+        /* Keep full height */
         z-index: 1;
         background: linear-gradient(135deg, #0a0a0a, #1a1a2e, #16213e);
         display: flex;
         align-items: center;
         justify-content: center;
+        padding-top: 100px;
+        /* Use padding instead of changing top/height */
+        box-sizing: border-box;
+        /* Include padding in height calculation */   
     }
 
     /* Override the component's container to be truly full-screen */
@@ -527,39 +533,6 @@
         box-shadow: 0 2px 8px rgba(39, 174, 96, 0.4);
     }
 
-    /* Sticky MIDI Player - positioned above arrangement controls */
-    .sticky-midi-player {
-        position: absolute;
-        bottom: 360%;
-        left: 0;
-        margin-bottom: 5px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background: rgba(255, 255, 255, 0.9);
-        border: 2px solid #27ae60;
-        border-radius: 12px;
-        padding: 6px 10px;
-        max-width: 420px;
-        align-self: flex-start;
-        /* Align to left */
-    }
-
-    .sticky-midi-player midi-player {
-        background: transparent;
-        border: none;
-        padding: 0;
-        margin: 0;
-        height: 35px;
-        width: 220px;
-        flex-shrink: 1;
-    }
-
-    .sticky-midi-controls {
-        display: flex;
-        gap: 5px;
-    }
-
     .mini-midi-btn {
         width: 30px;
         height: 30px;
@@ -578,72 +551,6 @@
     .mini-midi-btn:hover {
         transform: scale(1.1);
         box-shadow: 0 2px 8px rgba(39, 174, 96, 0.4);
-    }
-
-    .recorded-track-player {
-        position: absolute;
-        bottom: 140%;
-        /* Position above the sticky player */
-        left: 0;
-        margin-bottom: 5px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background: rgba(255, 255, 255, 0.9);
-        border: 2px solid #3498db;
-        /* Different color to distinguish */
-        border-radius: 12px;
-        padding: 6px 10px;
-        max-width: 420px;
-        align-self: flex-start;
-    }
-
-    .recorded-track-player midi-player {
-        background: transparent;
-        border: none;
-        padding: 0;
-        margin: 0;
-        height: 35px;
-        width: 220px;
-        flex-shrink: 1;
-    }
-
-    .recorded-track-controls {
-        display: flex;
-        gap: 5px;
-    }
-
-    .looped-track-player {
-        position: absolute;
-        bottom: 250%;
-        /* Increased from 180% to move it higher */
-        left: 0;
-        margin-bottom: 5px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background: rgba(255, 255, 255, 0.9);
-        border: 2px solid #e67e22;
-        border-radius: 12px;
-        padding: 6px 10px;
-        max-width: 480px;
-        align-self: flex-start;
-    }
-
-    .looped-track-player midi-player {
-        background: transparent;
-        border: none;
-        padding: 0;
-        margin: 0;
-        height: 35px;
-        width: 220px;
-        flex-shrink: 1;
-    }
-
-    .looped-track-controls {
-        display: flex;
-        gap: 5px;
-        align-items: center;
     }
 
     .loop-label {
@@ -856,14 +763,14 @@
     /* Combined Track Player */
     .combined-track-player {
         position: absolute;
-        bottom: 360%;
+        bottom: 100%;
         /* Position above everything else */
         left: 0;
         margin-bottom: 5px;
         display: flex;
         flex-direction: column;
         gap: 8px;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(94, 51, 173, 0.281);
         border: 2px solid #8e44ad;
         border-radius: 12px;
         padding: 10px;
