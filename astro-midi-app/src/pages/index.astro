@@ -86,7 +86,6 @@ import CircularWaveform from "../components/circular_waveform.astro";
                                 <input
                                     type="checkbox"
                                     id="userTrackToggle"
-                                    checked
                                     onchange="toggleUserTrack(this.checked)"
                                 />
                                 <span>🎹 Your Recording</span>
@@ -2319,6 +2318,11 @@ import CircularWaveform from "../components/circular_waveform.astro";
                                     "✅ Toggle system ready!",
                                     "ready",
                                 );
+
+                                // 🆕 ADD THIS LINE HERE:
+                                if (window.voiceCommands) {
+                                    window.voiceCommands.onArrangementComplete();
+                                }
 
                                 // 🔧 ADD THIS: Re-enable generate button
                                 if (generateBtn) {

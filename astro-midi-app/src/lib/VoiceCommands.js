@@ -15,6 +15,9 @@ export class VoiceCommands {
 
         this.setupSpeechRecognition();
         this.initializeGoogleVoices();
+
+        this.isGeneratingArrangement = false;
+        this.awaitingPlayConfirmation = false;
     }
 
     // 🆕 NEW: Initialize Google TTS voices
@@ -177,8 +180,8 @@ export class VoiceCommands {
         }
 
         Intent definitions:
-        - "record": User wants to start recording MIDI input (examples: "record", "capture", "reh-cord")
-        - "play": User wants to play/hear music or arrangements (examples: "play", "jam", "hear it")
+        - "record": User wants to start recording MIDI input (examples: "record", "capture", "record")
+        - "play": User wants to play/hear music or arrangements (examples: "play", "jam", "hear it", "play it", "can you play", "let me hear", "start playing")
         - "stop": User wants to stop playback (examples: "stop", "pause", "cancel")
         - "generate": User wants to create/arrange music (examples: "generate", "arrange", "make music")
         - "loop": User wants to enable/toggle looping (examples: "loop", "repeat")
@@ -228,6 +231,9 @@ export class VoiceCommands {
     executeIntent(intentData, originalCommand) {
         const { intent, confidence } = intentData;
 
+        console.log(`🤖 Intent detected: "${intent}" with ${(confidence * 100).toFixed(0)}% confidence`);
+        console.log(`🤖 Current state - awaitingPlayConfirmation: ${this.awaitingPlayConfirmation}`);
+
         // For low confidence or chat intent, use conversational mode
         if (confidence < 0.6 || intent === "chat") {
             console.log(`💬 Using conversational mode (intent: ${intent}, confidence: ${confidence})`);
@@ -235,11 +241,19 @@ export class VoiceCommands {
             return;
         }
 
+        // Special handling for play intent when awaiting confirmation
+        if (intent === "play" && this.awaitingPlayConfirmation) {
+            console.log("🎵 User confirmed - starting immediate play");
+            this.awaitingPlayConfirmation = false;
+            this.startImmediatePlay();
+            return;
+        }
+
         // Execute high-confidence commands directly
         switch (intent) {
             case "record":
                 console.log("▶️ Intent: Recording detected");
-                this.speakSmart("Starting recording", 'instant');
+                this.speakSmart("Starting recording"); // ← Change this line
                 startCapture();
                 this.extendActiveSession();
                 break;
@@ -261,6 +275,10 @@ export class VoiceCommands {
 
             case "stop":
                 console.log("⏹️ Intent: Stop detected");
+                // Clear any pending confirmations
+                this.awaitingPlayConfirmation = false;
+                this.isGeneratingArrangement = false;
+
                 const stopResponses = [
                     "Stopping playback",
                     "All stopped",
@@ -276,7 +294,11 @@ export class VoiceCommands {
 
             case "generate":
                 console.log("🎼 Intent: Generate detected");
-                this.speakSmart("Generating your arrangement", 'quick');
+
+                // Set flag to indicate we're in generation mode
+                this.isGeneratingArrangement = true;
+
+                // Call your existing generation function
                 analyzeAndGenerate();
                 this.extendActiveSession();
                 break;
@@ -292,6 +314,47 @@ export class VoiceCommands {
                 // Fallback to conversational mode for unrecognized intents
                 this.handleConversationalCommand(originalCommand);
         }
+    }
+
+    // Add this new method to your VoiceCommands class:
+    async onArrangementComplete() {
+        console.log("🎵 onArrangementComplete called - isGeneratingArrangement:", this.isGeneratingArrangement);
+
+        if (!this.isGeneratingArrangement) return;
+
+        this.isGeneratingArrangement = false;
+        console.log("🎵 Arrangement complete - asking for confirmation");
+
+        // Ask if user is ready
+        this.speakSmart("Your arrangement is ready! Say 'play' when you're ready to hear it.", 'conversational');
+
+        // Set a special flag to auto-play on next confirmation
+        this.awaitingPlayConfirmation = true;
+        this.extendActiveSession();
+
+        console.log("🎵 Now awaiting play confirmation - awaitingPlayConfirmation:", this.awaitingPlayConfirmation);
+    }
+
+    // Simplified immediate play method
+    async startImmediatePlay() {
+        this.speakSmart("Here we go!", 'instant');
+
+        // Very short pause, then start the music
+        setTimeout(() => {
+            console.log("🎵 Starting arrangement playback immediately");
+            playCombinedTrack();
+        }, 800); // Just enough time for "Here we go!" to finish
+    }
+
+    // Add this debug method to check current state:
+    debugState() {
+        console.log("🐛 VoiceCommands Debug State:");
+        console.log("  isGeneratingArrangement:", this.isGeneratingArrangement);
+        console.log("  awaitingPlayConfirmation:", this.awaitingPlayConfirmation);
+        console.log("  activeSession:", this.activeSession);
+        console.log("  isWakeWordMode:", this.isWakeWordMode);
+        console.log("  isSpeaking:", this.isSpeaking);
+        console.log("  isListening:", this.isListening);
     }
 
     // Conversational command handler
@@ -362,12 +425,12 @@ export class VoiceCommands {
 
     Your role:
     CREATIVE SUPPORT:
-    - Support through creative blocks by suggesting "reh-CORD" to capture their current musical ideas for analysis
+    - Support through creative blocks by suggesting "record" to capture their current musical ideas for analysis
     - For chord progressions: always suggest recording what they have so far to recommend the next chord
     - Arrange music around user ideas to help them hear fuller arrangements
     - Act as producer with suggestive feedback, not demanding direction
     - Stay intuitive and flow-friendly - don't over-talk or disrupt creativity
-    - For musical ideas that can be played: suggest saying "reh-CORD" to capture and analyze their MIDI input
+    - For musical ideas that can be played: suggest saying "start recording" to capture and analyze their MIDI input
 
     LYRICAL ASSISTANCE:
     - For lyrics: provide actual help with writing, rhyming, themes, and song structure
@@ -382,7 +445,7 @@ export class VoiceCommands {
     - Compare their ideas to existing music when helpful
 
     When users ask about chord progressions, always suggest they record their current chords first.
-    Always use "reh-CORD" (phonetic spelling) instead of "record" for the verb.
+    Always use "record" (phonetic spelling) instead of "record" for the verb.
 
     DECLINE ONLY: Non-music topics like politics, general news, or completely unrelated subjects.
 
@@ -467,7 +530,7 @@ export class VoiceCommands {
             const startTime = performance.now();
 
             const requestBody = {
-                input: { text: text },
+                input: { text: this.preprocessMusicalText(text) },
                 voice: {
                     languageCode: 'en-US',
                     name: this.selectedVoice.name,
@@ -543,40 +606,9 @@ export class VoiceCommands {
     speakSmart(text, type = 'quick') {
         // Use system TTS for very quick responses, Google TTS for everything else
         if (type === 'instant' || text.length < 10) {
-            this.speak(text); // System TTS - instant for super short responses
+            this.speakWithGoogle(text, type); // System TTS - instant for super short responses
         } else {
             this.speakWithGoogle(text, type); // Google TTS - much better quality
-        }
-    }
-
-    // Add this helper method to the VoiceCommands class
-    async getVisualizationAsBase64(filename) {
-        try {
-            const response = await fetch(
-                `/generated_visualizations/${filename}`,
-            );
-            if (!response.ok) {
-                throw new Error(
-                    `Failed to fetch visualization: ${response.status}`,
-                );
-            }
-
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const base64 = reader.result.split(",")[1]; // Remove data:image/png;base64, prefix
-                    resolve(base64);
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error(
-                "Error converting visualization to base64:",
-                error,
-            );
-            return null;
         }
     }
 
@@ -593,17 +625,13 @@ export class VoiceCommands {
                 "🔇 Speaking mode ON (AI response) - commands blocked",
             );
 
-            const utterance = new SpeechSynthesisUtterance(text);
+            const utterance = new SpeechSynthesisUtterance(this.preprocessMusicalText(text));
 
-            // Same voice selection as your regular speak method
+            // Remove Mark voice preference - use default
             const voices = speechSynthesis.getVoices();
             if (voices.length > 0) {
-                const selectedVoice = voices.find((voice) =>
-                    voice.name.includes("Mark"),
-                );
-                if (selectedVoice) {
-                    utterance.voice = selectedVoice;
-                }
+                // Just use the first available voice instead of searching for Mark
+                utterance.voice = voices[0];
             }
 
             utterance.rate = 0.9;
@@ -693,11 +721,14 @@ export class VoiceCommands {
             this.isSpeaking = true; // 🚫 Block commands while speaking
             console.log("🔇 Speaking mode ON - commands blocked");
 
-            const utterance = new SpeechSynthesisUtterance(text);
-
-            utterance.voice = speechSynthesis
-                .getVoices()
-                .find((voice) => voice.name.includes("Mark"));
+            const utterance = new SpeechSynthesisUtterance(this.preprocessMusicalText(text));
+            
+            // Remove Mark voice preference - use default
+            const voices = speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                // Just use the first available voice instead of searching for Mark
+                utterance.voice = voices[0];
+            }
 
             utterance.rate = 0.9;
             utterance.volume = 0.7;
@@ -711,7 +742,7 @@ export class VoiceCommands {
                         this.recognition.start();
                     }
                     console.log("🎤 Speaking mode OFF - commands enabled");
-                }, 1000); // 1 second buffer
+                }, 200); // Short buffer
             };
 
             utterance.onerror = () => {
@@ -759,147 +790,6 @@ export class VoiceCommands {
         }, 5000);
     }
 
-    // 🆕 NEW: Voice comparison tool
-    async compareVoices() {
-        const testPhrases = [
-            "Starting recording",
-            "That's a nice chord progression! Try adding a dominant seventh for more tension.",
-            "Let's generate a bass line that complements your melody."
-        ];
-
-        for (let i = 0; i < testPhrases.length; i++) {
-            const phrase = testPhrases[i];
-
-            console.log(`🎭 Testing phrase ${i + 1}: "${phrase}"`);
-            console.log("🔹 System TTS version:");
-            this.speak(phrase);
-
-            await new Promise(resolve => setTimeout(resolve, 4000));
-
-            console.log("🔹 Google TTS version:");
-            await this.speakWithGoogle(phrase);
-
-            if (i < testPhrases.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 4000));
-            }
-        }
-    }
-
-    // 🆕 NEW: Check usage stats
-    getUsageStats() {
-        const remainingChars = 1000000 - this.monthlyCharacterCount; // 1M free Wavenet chars
-        const percentUsed = (this.monthlyCharacterCount / 1000000) * 100;
-
-        console.log(`📊 Google TTS Usage Stats:`);
-        console.log(`📊 Characters used: ${this.monthlyCharacterCount.toLocaleString()}`);
-        console.log(`📊 Remaining free: ${remainingChars.toLocaleString()}`);
-        console.log(`📊 Percentage used: ${percentUsed.toFixed(1)}%`);
-
-        return {
-            used: this.monthlyCharacterCount,
-            remaining: remainingChars,
-            percentUsed: percentUsed
-        };
-    }
-
-    // 🎭 ADD THESE METHODS TO YOUR VoiceCommands CLASS
-
-    // 🆕 NEW: Test all available male voices
-    async testAllMaleVoices() {
-        if (!this.googleApiKey) {
-            console.log("❌ No Google API key found");
-            return;
-        }
-
-        try {
-            const response = await fetch(`https://texttospeech.googleapis.com/v1/voices?key=${this.googleApiKey}`);
-            const data = await response.json();
-
-            // Get all English male Wavenet voices
-            const maleVoices = data.voices.filter(voice =>
-                voice.languageCodes.includes('en-US') &&
-                voice.name.includes('Wavenet') &&
-                voice.ssmlGender === 'MALE'
-            );
-
-            console.log(`🎭 Found ${maleVoices.length} male Wavenet voices:`);
-            maleVoices.forEach(voice => {
-                console.log(`🔹 ${voice.name}`);
-            });
-
-            // Test each voice with a sample phrase
-            const testPhrase = "Hey! Let's create some amazing music together.";
-
-            for (let i = 0; i < maleVoices.length; i++) {
-                const voice = maleVoices[i];
-                console.log(`🎤 Testing ${voice.name}...`);
-
-                await this.testSpecificVoice(voice, testPhrase);
-
-                // Wait 4 seconds between voices
-                if (i < maleVoices.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 4000));
-                }
-            }
-
-        } catch (error) {
-            console.error("❌ Failed to fetch voices:", error);
-        }
-    }
-
-    // 🆕 NEW: Test all available female voices  
-    async testAllFemaleVoices() {
-        if (!this.googleApiKey) {
-            console.log("❌ No Google API key found");
-            return;
-        }
-
-        try {
-            const response = await fetch(`https://texttospeech.googleapis.com/v1/voices?key=${this.googleApiKey}`);
-            const data = await response.json();
-
-            // Get all English female Wavenet voices
-            const femaleVoices = data.voices.filter(voice =>
-                voice.languageCodes.includes('en-US') &&
-                voice.name.includes('Wavenet') &&
-                voice.ssmlGender === 'FEMALE'
-            );
-
-            console.log(`🎭 Found ${femaleVoices.length} female Wavenet voices:`);
-            femaleVoices.forEach(voice => {
-                console.log(`🔹 ${voice.name}`);
-            });
-
-            // Test each voice with a sample phrase
-            const testPhrase = "Hey! Let's create some amazing music together.";
-
-            for (let i = 0; i < femaleVoices.length; i++) {
-                const voice = femaleVoices[i];
-                console.log(`🎤 Testing ${voice.name}...`);
-
-                await this.testSpecificVoice(voice, testPhrase);
-
-                // Wait 4 seconds between voices
-                if (i < femaleVoices.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 4000));
-                }
-            }
-
-        } catch (error) {
-            console.error("❌ Failed to fetch voices:", error);
-        }
-    }
-
-    // 🆕 NEW: Test a specific voice
-    async testSpecificVoice(voice, text) {
-        const originalVoice = this.selectedVoice;
-        this.selectedVoice = voice; // Temporarily use this voice
-
-        await this.speakWithGoogle(text, 'quick');
-
-        this.selectedVoice = originalVoice; // Restore original voice
-    }
-
     // 🆕 NEW: Set your preferred voice permanently
     async setVoice(voiceName) {
         if (!this.googleApiKey) {
@@ -925,6 +815,95 @@ export class VoiceCommands {
         } catch (error) {
             console.error("❌ Failed to set voice:", error);
         }
+    }
+
+    // Add this comprehensive method to your VoiceCommands class:
+    preprocessMusicalText(text) {
+        // Fix sharp symbol pronunciation first
+        text = text.replace(/#/g, " sharp");
+
+        // Fix all minor chords (natural notes)
+        text = text.replace(/\bAm\b/g, "A minor");
+        text = text.replace(/\bBm\b/g, "B minor");
+        text = text.replace(/\bCm\b/g, "C minor");
+        text = text.replace(/\bDm\b/g, "D minor");
+        text = text.replace(/\bEm\b/g, "E minor");
+        text = text.replace(/\bFm\b/g, "F minor");
+        text = text.replace(/\bGm\b/g, "G minor");
+
+        // Fix sharp minor chords
+        text = text.replace(/\bA sharp m\b/g, "A sharp minor");
+        text = text.replace(/\bB sharp m\b/g, "B sharp minor");
+        text = text.replace(/\bC sharp m\b/g, "C sharp minor");
+        text = text.replace(/\bD sharp m\b/g, "D sharp minor");
+        text = text.replace(/\bF sharp m\b/g, "F sharp minor");
+        text = text.replace(/\bG sharp m\b/g, "G sharp minor");
+
+        // Fix seventh chords (natural notes)
+        text = text.replace(/\bA7\b/g, "A seven");
+        text = text.replace(/\bB7\b/g, "B seven");
+        text = text.replace(/\bC7\b/g, "C seven");
+        text = text.replace(/\bD7\b/g, "D seven");
+        text = text.replace(/\bE7\b/g, "E seven");
+        text = text.replace(/\bF7\b/g, "F seven");
+        text = text.replace(/\bG7\b/g, "G seven");
+
+        // Fix sharp seventh chords
+        text = text.replace(/\bA sharp 7\b/g, "A sharp seven");
+        text = text.replace(/\bC sharp 7\b/g, "C sharp seven");
+        text = text.replace(/\bD sharp 7\b/g, "D sharp seven");
+        text = text.replace(/\bF sharp 7\b/g, "F sharp seven");
+        text = text.replace(/\bG sharp 7\b/g, "G sharp seven");
+
+        // Fix minor seventh chords
+        text = text.replace(/\bAm7\b/g, "A minor seven");
+        text = text.replace(/\bBm7\b/g, "B minor seven");
+        text = text.replace(/\bCm7\b/g, "C minor seven");
+        text = text.replace(/\bDm7\b/g, "D minor seven");
+        text = text.replace(/\bEm7\b/g, "E minor seven");
+        text = text.replace(/\bFm7\b/g, "F minor seven");
+        text = text.replace(/\bGm7\b/g, "G minor seven");
+
+        // Fix sharp minor seventh chords
+        text = text.replace(/\bA sharp m7\b/g, "A sharp minor seven");
+        text = text.replace(/\bC sharp m7\b/g, "C sharp minor seven");
+        text = text.replace(/\bD sharp m7\b/g, "D sharp minor seven");
+        text = text.replace(/\bF sharp m7\b/g, "F sharp minor seven");
+        text = text.replace(/\bG sharp m7\b/g, "G sharp minor seven");
+
+        // Fix major seventh chords
+        text = text.replace(/\bAmaj7\b/g, "A major seven");
+        text = text.replace(/\bBmaj7\b/g, "B major seven");
+        text = text.replace(/\bCmaj7\b/g, "C major seven");
+        text = text.replace(/\bDmaj7\b/g, "D major seven");
+        text = text.replace(/\bEmaj7\b/g, "E major seven");
+        text = text.replace(/\bFmaj7\b/g, "F major seven");
+        text = text.replace(/\bGmaj7\b/g, "G major seven");
+
+        // Fix sharp major seventh chords
+        text = text.replace(/\bA sharp maj7\b/g, "A sharp major seven");
+        text = text.replace(/\bC sharp maj7\b/g, "C sharp major seven");
+        text = text.replace(/\bD sharp maj7\b/g, "D sharp major seven");
+        text = text.replace(/\bF sharp maj7\b/g, "F sharp major seven");
+        text = text.replace(/\bG sharp maj7\b/g, "G sharp major seven");
+
+        // Fix suspended chords
+        text = text.replace(/\bsus2\b/g, "suspended two");
+        text = text.replace(/\bsus4\b/g, "suspended four");
+
+        // Fix diminished and augmented
+        text = text.replace(/\bdim\b/g, "diminished");
+        text = text.replace(/\baug\b/g, "augmented");
+
+        // Fix progression arrows
+        text = text.replace(/\s*→\s*/g, " to ");
+        text = text.replace(/\s*-->\s*/g, " to ");
+        text = text.replace(/\s*->\s*/g, " to ");
+
+        // Fix slash chords (like C/E)
+        text = text.replace(/\b([A-G](?:\s*sharp)?(?:m|maj|dim|aug)?(?:7|9|11|13)?)\s*\/\s*([A-G](?:\s*sharp)?)\b/g, "$1 over $2");
+
+        return text;
     }
 
     // 🆕 NEW: Get list of all available voices
@@ -963,9 +942,6 @@ export class VoiceCommands {
 
             console.log("\n🎯 TO CHANGE VOICE:");
             console.log("voiceCommands.setVoice('en-US-Wavenet-F')");
-            console.log("\n🎤 TO TEST VOICES:");
-            console.log("voiceCommands.testAllMaleVoices()");
-            console.log("voiceCommands.testAllFemaleVoices()");
 
         } catch (error) {
             console.error("❌ Failed to fetch voices:", error);
