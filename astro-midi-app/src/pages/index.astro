@@ -773,11 +773,11 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
         if (combinedPlayer && combinedMidiElement && window.midiUrls) {
             // Start with combined (both tracks)
-            combinedMidiElement.src = window.midiUrls.combined;
+            combinedMidiElement.src =  window.midiUrls.arrangementOnly;
             combinedPlayer.style.display = "flex";
 
             // Reset checkboxes to both checked
-            document.getElementById("userTrackToggle").checked = true;
+            document.getElementById("userTrackToggle").checked = false;
             document.getElementById("arrangementTrackToggle").checked = true;
 
             console.log("🎼 Working combined player shown");
@@ -1252,7 +1252,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
         );
 
         if (combinedPlayer && combinedMidiElement && window.combinedMidiUrl) {
-            combinedMidiElement.src = window.combinedMidiUrl;
+            combinedMidiElement.src = window.midiUrls.arrangementOnly;
             combinedPlayer.style.display = "flex";
 
             // Reset checkboxes to both checked

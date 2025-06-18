@@ -137,16 +137,21 @@ export class VoiceCommands {
                 console.log("👋 Wake word detected!");
 
                 const responses = [
-                    "What's up?",
-                    "Yeah?",
-                    "I'm listening",
-                    "Go ahead",
-                    "What can I do?",
-                    "I'm here",
-                    "Yes?",
-                    "Ready!",
-                    "What's on your mind?",
-                    "How can I help?",
+                    "What can I help with your music journey today?",
+                    "Ready to create some amazing music together?",
+                    "Let's make some beautiful music! What's on your mind?",
+                    "I'm here to help bring your musical ideas to life!",
+                    "What musical magic are we creating today?",
+                    "Ready to turn your melodies into full arrangements?",
+                    "Let's explore your musical creativity! What would you like to work on?",
+                    "I'm excited to help with your music! What can I do?",
+                    "Time to make some music! What's your vision?",
+                    "Ready to jam? What musical ideas are you working with?",
+                    "Let's create something awesome together! What's the plan?",
+                    "Your musical co-pilot is ready! What can I help you build?",
+                    "Ready to transform your musical ideas into reality?",
+                    "Let's bring your music to life! What are you thinking?",
+                    "I'm here to help you create amazing arrangements! What's up?"
                 ];
 
                 const randomResponse = responses[Math.floor(Math.random() * responses.length)];
@@ -174,25 +179,27 @@ export class VoiceCommands {
         
         Analyze the user's voice command and return ONLY a JSON response with this structure:
         {
-            "intent": "record|play|stop|generate|loop|chat",
+            "intent": "record|play|stop|generate|loop|toggle_recording|chat",
             "confidence": 0.0-1.0,
             "parameters": {...any additional params...}
         }
-
+    
         Intent definitions:
-        - "record": User wants to start recording MIDI input (examples: "record", "capture", "record")
+        - "record": User wants to start recording MIDI input (examples: "record", "capture", "start recording")
         - "play": User wants to play/hear music or arrangements (examples: "play", "jam", "hear it", "play it", "can you play", "let me hear", "start playing")
         - "stop": User wants to stop playback (examples: "stop", "pause", "cancel")
         - "generate": User wants to create/arrange music (examples: "generate", "arrange", "make music")
         - "loop": User wants to enable/toggle looping (examples: "loop", "repeat")
+        - "toggle_recording": User wants to include/exclude their recording in playback (examples: "add my recording", "include my recording", "turn on my recording", "play my recording too", "remove my recording", "turn off my recording", "don't play my recording")
         - "chat": General conversation, questions, or unclear commands
-
+    
         Examples:
         "let's record this" → {"intent": "record", "confidence": 0.9}
-        "time to capture this fine tune" → {"intent": "record", "confidence": 0.8}
         "play that arrangement" → {"intent": "play", "confidence": 0.9}
-        "make some backing music" → {"intent": "generate", "confidence": 0.8}
-        "what should I play next?" → {"intent": "chat", "confidence": 0.9}`;
+        "add my recording to the mix" → {"intent": "toggle_recording", "confidence": 0.9}
+        "include my recording" → {"intent": "toggle_recording", "confidence": 0.8}
+        "turn off my recording" → {"intent": "toggle_recording", "confidence": 0.9}
+        "play my recording with the arrangement" → {"intent": "toggle_recording", "confidence": 0.8}`;
 
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
@@ -207,41 +214,34 @@ export class VoiceCommands {
                         { role: "user", content: command }
                     ],
                     max_tokens: 100,
-                    temperature: 0.1, // Low temperature for consistent classification
+                    temperature: 0.1,
                 }),
             });
 
             const result = await response.json();
             const aiResponse = result.choices[0].message.content;
 
-            // Parse the JSON response
             const intentData = JSON.parse(aiResponse);
-
-            // Execute the classified intent
             this.executeIntent(intentData, command);
 
         } catch (error) {
             console.error("❌ Intent classification failed:", error);
-            // Fallback to conversational mode
             this.handleConversationalCommand(command);
         }
     }
+    
 
-    // Execute classified intents
     executeIntent(intentData, originalCommand) {
         const { intent, confidence } = intentData;
 
         console.log(`🤖 Intent detected: "${intent}" with ${(confidence * 100).toFixed(0)}% confidence`);
-        console.log(`🤖 Current state - awaitingPlayConfirmation: ${this.awaitingPlayConfirmation}`);
 
-        // For low confidence or chat intent, use conversational mode
         if (confidence < 0.6 || intent === "chat") {
             console.log(`💬 Using conversational mode (intent: ${intent}, confidence: ${confidence})`);
             this.handleConversationalCommand(originalCommand);
             return;
         }
 
-        // Special handling for play intent when awaiting confirmation
         if (intent === "play" && this.awaitingPlayConfirmation) {
             console.log("🎵 User confirmed - starting immediate play");
             this.awaitingPlayConfirmation = false;
@@ -249,11 +249,10 @@ export class VoiceCommands {
             return;
         }
 
-        // Execute high-confidence commands directly
         switch (intent) {
             case "record":
                 console.log("▶️ Intent: Recording detected");
-                this.speakSmart("Starting recording"); // ← Change this line
+                this.speakSmart("Starting recording");
                 startCapture();
                 this.extendActiveSession();
                 break;
@@ -275,7 +274,6 @@ export class VoiceCommands {
 
             case "stop":
                 console.log("⏹️ Intent: Stop detected");
-                // Clear any pending confirmations
                 this.awaitingPlayConfirmation = false;
                 this.isGeneratingArrangement = false;
 
@@ -295,10 +293,27 @@ export class VoiceCommands {
             case "generate":
                 console.log("🎼 Intent: Generate detected");
 
-                // Set flag to indicate we're in generation mode
-                this.isGeneratingArrangement = true;
+                // 🚨 CHECK IF USER HAS RECORDED ANYTHING FIRST
+                const hasRecording = !!window.uploadedMidiResult;
 
-                // Call your existing generation function
+                if (!hasRecording) {
+                    console.log("🎼 No recording found - guiding user to record first");
+
+                    const introResponses = [
+                        "That sounds awesome! First, let's capture your melody. Ask me to record you when you're ready to play it!",
+                        "Great idea! Let's start by recording your melody, then I'll add instruments to it.",
+                        "I'd love to help! First ask me to record you and play your melody, then I'll create backing instruments.",
+                        "Perfect! Step one: ask me to record you and play your tune. Then I'll build an arrangement around it.",
+                        "Sounds like a plan! First we need to capture your melody - ask me to record you when ready!"
+                    ];
+
+                    const randomIntro = introResponses[Math.floor(Math.random() * introResponses.length)];
+                    this.speakSmart(randomIntro, 'conversational');
+                    this.extendActiveSession();
+                    return; // Don't try to generate anything
+                }
+
+                this.isGeneratingArrangement = true;
                 analyzeAndGenerate();
                 this.extendActiveSession();
                 break;
@@ -310,10 +325,57 @@ export class VoiceCommands {
                 this.extendActiveSession();
                 break;
 
+            // 🆕 NEW: Toggle recording inclusion
+            case "toggle_recording":
+                console.log("🎹 Intent: Toggle recording detected");
+                this.toggleRecordingInclusion();
+                this.extendActiveSession();
+                break;
+
             default:
-                // Fallback to conversational mode for unrecognized intents
                 this.handleConversationalCommand(originalCommand);
         }
+    }
+
+    toggleRecordingInclusion() {
+        const userTrackCheckbox = document.getElementById('userTrackToggle');
+
+        if (userTrackCheckbox) {
+            // Toggle the checkbox state
+            userTrackCheckbox.checked = !userTrackCheckbox.checked;
+
+            const isNowIncluded = userTrackCheckbox.checked;
+
+            // Call your existing function to handle the toggle
+            toggleUserTrack(isNowIncluded);
+
+            const responses = isNowIncluded ? [
+                "Your recording is now included",
+                "Added your recording to the mix",
+                "Recording included",
+                "Your part is now playing",
+                "Recording turned on"
+            ] : [
+                "Your recording is now excluded",
+                "Removed your recording from the mix",
+                "Recording excluded",
+                "Your part is now muted",
+                "Recording turned off"
+            ];
+
+            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+            this.speakSmart(randomResponse, 'quick');
+
+            console.log(`🎹 User track toggled: ${isNowIncluded ? 'ON' : 'OFF'}`);
+
+        } else {
+            console.error("❌ User track checkbox not found");
+            this.speakSmart("Sorry, couldn't find the recording control", 'quick');
+        }
+    }
+
+    hasUserRecordedAnything() {
+        return !!window.uploadedMidiResult;
     }
 
     // Add this new method to your VoiceCommands class:
@@ -326,7 +388,7 @@ export class VoiceCommands {
         console.log("🎵 Arrangement complete - asking for confirmation");
 
         // Ask if user is ready
-        this.speakSmart("Your arrangement is ready! Say 'play' when you're ready to hear it.", 'conversational');
+        this.speakSmart("Your arrangement is ready! Just say 'play'!", 'conversational');
 
         // Set a special flag to auto-play on next confirmation
         this.awaitingPlayConfirmation = true;
@@ -361,15 +423,23 @@ export class VoiceCommands {
     async handleConversationalCommand(command) {
         this.extendActiveSession();
 
+        console.log("💬 Handling conversational command:", command);
+
         try {
             const apiKey = import.meta.env.PUBLIC_OPENAI_API_KEY;
 
-            // Get current analysis results if available (your existing logic)
+            if (!apiKey) {
+                console.error("❌ No OpenAI API key found");
+                this.speakSmart("Sorry, I need an API key to respond to that", 'quick');
+                return;
+            }
+
+            // Check if user has recorded anything yet
+            const hasCurrentAnalysis = !!window.uploadedMidiResult;
+
             let contextMessage = "";
-
-            if (window.uploadedMidiResult) {
+            if (hasCurrentAnalysis) {
                 const result = window.uploadedMidiResult;
-
                 if (result.detected_type === "chord_progression") {
                     const chords = result.chord_progression || [];
                     contextMessage = `Current analyzed chord progression: ${chords.join(" → ")}. Key: ${result.key || "Unknown"}.`;
@@ -378,99 +448,54 @@ export class VoiceCommands {
                     const chords = result.harmonizations[style]?.progression || [];
                     contextMessage = `Current melody harmonized as: ${chords.join(" → ")}. Key: ${result.key || "Unknown"}.`;
                 }
-
-                if (result.key_confidence) {
-                    contextMessage += ` (${(result.key_confidence * 100).toFixed(0)}% confidence)`;
-                }
             }
 
-            // Determine if user has current analysis (your existing logic)
-            const hasCurrentAnalysis = !!window.uploadedMidiResult;
-
+            // Different system prompts based on whether they've recorded anything
             const systemPrompt = hasCurrentAnalysis
-                ? `You're a music co-pilot for songwriters and composers.
-    Your responses are part of a real-time creative flow, so keep replies under 30 words and focused. The user has already recorded and analyzed their music—you can see their chord progression.
-
+                ? `You're a music co-pilot for songwriters and composers. Keep responses under 30 words since this is voice interaction.
+    
+    The user has already recorded and analyzed their music. For ANY requests about arrangements, instruments, backing tracks, or making music fuller, always suggest they say "generate" to create an arrangement.
+    
     Your role:
-    React naturally: use short, supportive phrases like "nice one," "let's build on that," "here's a thought," or "this could be cool."
+    - For arrangement requests: Always suggest saying "generate" to create backing instruments
+    - For musical questions: Give specific, actionable advice about their chord progression
+    - For general music chat: Be supportive and knowledgeable
+    - Keep everything concise and natural
+    
+    If they ask about adding instruments, backing tracks, fuller sound, or arrangements, respond like: "Say 'generate' and I'll create backing instruments for your [melody/chords]!"`
 
-    MUSICAL SUGGESTIONS:
-    - Suggest specific next chords based on the current progression
-    - Offer harmonic variations, extensions, or substitutions—musically grounded and in context
-    - Recommend arrangement ideas that build on what they've already played
-    - Suggest melodic directions that fit and elevate their chords
-    - Think like a producer: give actionable, concrete musical feedback
-    - Help break creative blocks with quick, specific musical suggestions
-
-    LYRICAL ASSISTANCE:
-    - For lyrics: provide actual lyrical help, suggest rhymes, themes, or specific lines that fit the mood
-    - Help with song structure, verse/chorus ideas, or lyrical concepts
-    - Offer creative writing support for songwriting
-
-    MUSICAL CONVERSATIONS:
-    - Answer questions about bands, artists, genres, and musical influences
-    - Compare their music to existing artists or songs when asked
-    - Discuss musical theory, techniques, and creative approaches
-    - Share insights about musical styles, production techniques, or songwriting methods
-    - Help identify what genre or style their music fits into
-
-    Keep things flowing—don't over-explain or interrupt creative momentum.
-
-    Avoid:
-    Repeating suggestions to re-record—assume the music is already analyzed.
-    Abstract or overly vague advice—always be musically useful.
-
-    Tone: Warm, grounded, musically intelligent, and creatively supportive. You're here to help them make confident next moves.`
-                : `You are a music co-pilot for songwriters and composers. Keep responses under 30 words since this is voice interaction.
-
-    Your role:
-    CREATIVE SUPPORT:
-    - Support through creative blocks by suggesting "record" to capture their current musical ideas for analysis
-    - For chord progressions: always suggest recording what they have so far to recommend the next chord
-    - Arrange music around user ideas to help them hear fuller arrangements
-    - Act as producer with suggestive feedback, not demanding direction
-    - Stay intuitive and flow-friendly - don't over-talk or disrupt creativity
-    - For musical ideas that can be played: suggest saying "start recording" to capture and analyze their MIDI input
-
-    LYRICAL ASSISTANCE:
-    - For lyrics: provide actual help with writing, rhyming, themes, and song structure
-    - Suggest specific lyrical ideas, word choices, or creative directions
-    - Help with songwriting techniques and lyrical flow
-
-    MUSICAL CONVERSATIONS:
-    - Answer questions about bands, artists, genres, and musical influences  
-    - Discuss music theory, production techniques, and creative approaches
-    - Help identify genres, styles, or similar artists
-    - Share insights about songwriting methods and musical techniques
-    - Compare their ideas to existing music when helpful
-
-    When users ask about chord progressions, always suggest they record their current chords first.
-    Always use "record" (phonetic spelling) instead of "record" for the verb.
-
-    DECLINE ONLY: Non-music topics like politics, general news, or completely unrelated subjects.
-
-    Tone: Supportive, suggestive, concise. You're an extra set of musically intelligent ears in their creative process.`;
+                : `You're a music co-pilot for songwriters and composers. Keep responses under 30 words since this is voice interaction.
+    
+    The user hasn't recorded anything yet. Your main job is to recognize when they're describing musical goals (especially about arrangements, adding instruments, or making music fuller) and guide them to record first.
+    
+    RECOGNIZE THESE AS ARRANGEMENT INTENTIONS:
+    - "I have a melody and want to see how it sounds with instruments"
+    - "I'd like to add backing to this tune I have"
+    - "How would this sound with more instruments"
+    - "I want to create an arrangement"
+    - "Can we build on this melody"
+    - Any mention of adding instruments, backing tracks, fuller sound, arrangements
+    
+    FOR ARRANGEMENT INTENTIONS: Respond enthusiastically and guide them to record first, like:
+    "That sounds awesome! First, let's capture your melody. Ask me to record you when you're ready to play it, then I'll help add instruments!"
+    
+    FOR OTHER MUSIC QUESTIONS: Be helpful and supportive but concise.
+    
+    Always be encouraging about their musical ideas!`;
 
             const messages = [
-                {
-                    role: "system",
-                    content: systemPrompt,
-                },
+                { role: "system", content: systemPrompt }
             ];
 
-            // Add context about current analysis if available (your existing logic)
+            // Add context about current analysis if available
             if (contextMessage) {
-                messages.push({
-                    role: "system",
-                    content: contextMessage,
-                });
+                messages.push({ role: "system", content: contextMessage });
             }
 
             // Add user command
-            messages.push({
-                role: "user",
-                content: command,
-            });
+            messages.push({ role: "user", content: command });
+
+            console.log("💬 Sending to OpenAI - hasRecording:", hasCurrentAnalysis);
 
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
@@ -493,12 +518,29 @@ export class VoiceCommands {
             }
 
             const aiResponse = result.choices[0].message.content;
+            console.log("💬 AI response:", aiResponse);
 
             // Use Google TTS for conversational responses
             this.speakWithGoogle(aiResponse, 'conversational');
+
         } catch (error) {
             console.error("❌ OpenAI request failed:", error);
-            this.speakSmart("Sorry, I couldn't process that right now", 'quick');
+
+            // Smart fallback for arrangement intentions when AI fails
+            const lowerCommand = command.toLowerCase();
+            if ((lowerCommand.includes("melody") && (lowerCommand.includes("instrument") || lowerCommand.includes("sound"))) ||
+                lowerCommand.includes("arrangement") || lowerCommand.includes("backing") ||
+                lowerCommand.includes("add") && lowerCommand.includes("instrument")) {
+
+                const hasRecording = !!window.uploadedMidiResult;
+                if (hasRecording) {
+                    this.speakSmart("Say 'generate' and I'll add instruments to your music!", 'quick');
+                } else {
+                    this.speakSmart("That sounds great! Ask me to record you first, then I'll help add instruments.", 'quick');
+                }
+            } else {
+                this.speakSmart("Sorry, I couldn't process that right now", 'quick');
+            }
         }
     }
 
