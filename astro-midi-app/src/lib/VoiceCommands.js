@@ -133,7 +133,7 @@ export class VoiceCommands {
 
         if (this.isWakeWordMode && !this.activeSession) {
             // Wake word detection (unchanged)
-            if (command.includes("hey wave") || command.includes("hey")) {
+            if (command.includes("hey" || "hey bside")) {
                 console.log("👋 Wake word detected!");
 
                 const responses = [
@@ -718,7 +718,7 @@ export class VoiceCommands {
         // Set timeout to end session after 30 seconds of inactivity
         this.sessionTimeout = setTimeout(() => {
             this.endActiveSession();
-        }, 30000); // 30 seconds
+        }, 36000000); // 30 seconds
     }
 
     // Extend active session (reset the timeout)
@@ -732,7 +732,7 @@ export class VoiceCommands {
             // Set new timeout
             this.sessionTimeout = setTimeout(() => {
                 this.endActiveSession();
-            }, 30000); // Another 30 seconds
+            }, 36000000); // Another 30 seconds
 
             console.log("⏰ Active session extended - 30 more seconds");
         }
