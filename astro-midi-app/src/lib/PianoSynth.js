@@ -6,7 +6,7 @@ export class PianoSynth {
         this.wetGain = null;
         this.reverbNode = null;
         this.activeNotes = new Map();
-        this.volume = 0.1;
+        this.volume = 0.2; // 20% volume (0.2 = 20%)
         this.reverbAmount = 0.15; // 15% reverb by default
         this.soundType = "piano";
     }

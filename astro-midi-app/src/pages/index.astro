@@ -206,10 +206,10 @@ import CircularWaveform from "../components/circular_waveform.astro";
                                     id="pianoVolume"
                                     min="0"
                                     max="100"
-                                    value="16"
+                                    value="20"
                                     oninput="updateMidiBarVolume(this.value)"
                                 />
-                                <span id="volumeValue">16%</span>
+                                <span id="volumeValue">20%</span>
                             </div>
                             <div class="control-group">
                                 <label>Sound:</label>
@@ -874,6 +874,9 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
         try {
             await pianoSynth.init();
+            
+            // Set initial volume to match UI slider (20%)
+            pianoSynth.setVolume(20);
 
             const input = Array.from(midiAccess.inputs.values()).find(
                 (inp) => inp.id === deviceId,
@@ -1267,6 +1270,16 @@ import CircularWaveform from "../components/circular_waveform.astro";
     metronome = new Metronome();
     pianoSynth = new PianoSynth();
     midiRecorder = new MidiRecorder();
+    
+    // Set initial volume to match UI on page load
+    setTimeout(() => {
+        const volumeSlider = document.getElementById("pianoVolume");
+        if (volumeSlider && pianoSynth) {
+            const initialVolume = volumeSlider.value;
+            pianoSynth.setVolume(initialVolume);
+            console.log("🔊 Set initial volume to:", initialVolume + "%");
+        }
+    }, 100);
 
     function updateMidiDebugInfo(message) {
         const info = document.getElementById("midiPlayerInfo");

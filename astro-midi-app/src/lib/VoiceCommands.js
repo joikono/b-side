@@ -18,6 +18,7 @@ export class VoiceCommands {
 
         this.isGeneratingArrangement = false;
         this.awaitingPlayConfirmation = false;
+        this.shouldAutoPlay = false; // 🆕 NEW: Flag for auto-play after generation
     }
 
     // 🆕 NEW: Initialize Google TTS voices
@@ -314,6 +315,7 @@ export class VoiceCommands {
                 }
 
                 this.isGeneratingArrangement = true;
+                this.shouldAutoPlay = true; // 🆕 NEW: Flag to auto-play after generation
                 analyzeAndGenerate();
                 this.extendActiveSession();
                 break;
@@ -385,12 +387,27 @@ export class VoiceCommands {
         if (!this.isGeneratingArrangement) return;
 
         this.isGeneratingArrangement = false;
+        
+        // 🆕 NEW: Check if we should auto-play
+        if (this.shouldAutoPlay) {
+            console.log("🎵 Auto-playing arrangement after generation");
+            this.shouldAutoPlay = false;
+            
+            // Brief pause, then announce and play
+            this.speakSmart("Your arrangement is ready! Here we go!", 'quick');
+            
+            setTimeout(() => {
+                playCombinedTrack();
+                console.log("🎵 Auto-started arrangement playback");
+            }, 1200); // Give time for the speech to finish
+            
+            this.extendActiveSession();
+            return;
+        }
+
+        // Original behavior for manual play confirmation
         console.log("🎵 Arrangement complete - asking for confirmation");
-
-        // Ask if user is ready
         this.speakSmart("Your arrangement is ready! Just say 'play'!", 'conversational');
-
-        // Set a special flag to auto-play on next confirmation
         this.awaitingPlayConfirmation = true;
         this.extendActiveSession();
 
@@ -413,6 +430,7 @@ export class VoiceCommands {
         console.log("🐛 VoiceCommands Debug State:");
         console.log("  isGeneratingArrangement:", this.isGeneratingArrangement);
         console.log("  awaitingPlayConfirmation:", this.awaitingPlayConfirmation);
+        console.log("  shouldAutoPlay:", this.shouldAutoPlay);
         console.log("  activeSession:", this.activeSession);
         console.log("  isWakeWordMode:", this.isWakeWordMode);
         console.log("  isSpeaking:", this.isSpeaking);
@@ -701,7 +719,7 @@ export class VoiceCommands {
                         this.recognition.start();
                     }
                     console.log("🎤 Speaking mode OFF after error");
-                }, 3000);
+                }, 2000);
             };
 
             speechSynthesis.speak(utterance);
