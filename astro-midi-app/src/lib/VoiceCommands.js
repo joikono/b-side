@@ -180,7 +180,7 @@ export class VoiceCommands {
         
         Analyze the user's voice command and return ONLY a JSON response with this structure:
         {
-            "intent": "record|play|stop|generate|loop|toggle_recording|chat",
+            "intent": "record|play|stop|generate|loop|toggle_recording|demo|chat",
             "confidence": 0.0-1.0,
             "parameters": {...any additional params...}
         }
@@ -192,6 +192,7 @@ export class VoiceCommands {
         - "generate": User wants to create/arrange music (examples: "generate", "arrange", "make music")
         - "loop": User wants to enable/toggle looping (examples: "loop", "repeat")
         - "toggle_recording": User wants to include/exclude their recording in playback (examples: "add my recording", "include my recording", "turn on my recording", "play my recording too", "remove my recording", "turn off my recording", "don't play my recording")
+        - "demo": User is starting a demo or presentation (examples: "this is a demo", "we're demoing", "demo mode", "presenting to audience", "show the audience")
         - "chat": General conversation, questions, or unclear commands
     
         Examples:
@@ -200,7 +201,10 @@ export class VoiceCommands {
         "add my recording to the mix" → {"intent": "toggle_recording", "confidence": 0.9}
         "include my recording" → {"intent": "toggle_recording", "confidence": 0.8}
         "turn off my recording" → {"intent": "toggle_recording", "confidence": 0.9}
-        "play my recording with the arrangement" → {"intent": "toggle_recording", "confidence": 0.8}`;
+        "play my recording with the arrangement" → {"intent": "toggle_recording", "confidence": 0.8}
+        "this is a demo" → {"intent": "demo", "confidence": 0.9}
+        "we're presenting this" → {"intent": "demo", "confidence": 0.8}
+        "demo mode" → {"intent": "demo", "confidence": 0.9}`;
 
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
@@ -332,6 +336,11 @@ export class VoiceCommands {
                 console.log("🎹 Intent: Toggle recording detected");
                 this.toggleRecordingInclusion();
                 this.extendActiveSession();
+                break;
+            
+            case "demo":
+                console.log("🎭 Intent: Demo detected");
+                this.startDemoGreeting();
                 break;
 
             default:
@@ -561,6 +570,15 @@ export class VoiceCommands {
             }
         }
     }
+
+    async startDemoGreeting() {
+        const demoGreeting = 
+            "Hi there folks! Thanks for coming out today. This hot weather is unbearable, thank god for air condition! But hey, we're here to make music, so let's get this demo rolling!";
+
+        // Use the high-quality Google TTS for the demo greeting
+        this.speakSmart(demoGreeting, 'conversational');
+    }
+    
 
     // 🆕 NEW: Google TTS method
     async speakWithGoogle(text, priority = 'normal') {
