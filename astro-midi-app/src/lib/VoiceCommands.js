@@ -134,7 +134,7 @@ export class VoiceCommands {
 
         if (this.isWakeWordMode && !this.activeSession) {
             // Wake word detection (unchanged)
-            if (command.includes("hey" || "hey bside")) {
+            if (command.includes("hey beside" || "hey b side" || "hey b-side")) {
                 console.log("👋 Wake word detected!");
 
                 const responses = [

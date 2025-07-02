@@ -773,7 +773,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
         if (combinedPlayer && combinedMidiElement && window.midiUrls) {
             // Start with combined (both tracks)
-            combinedMidiElement.src =  window.midiUrls.arrangementOnly;
+            combinedMidiElement.src = window.midiUrls.arrangementOnly;
             combinedPlayer.style.display = "flex";
 
             // Reset checkboxes to both checked
@@ -874,7 +874,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
 
         try {
             await pianoSynth.init();
-            
+
             // Set initial volume to match UI slider (20%)
             pianoSynth.setVolume(20);
 
@@ -1270,7 +1270,7 @@ import CircularWaveform from "../components/circular_waveform.astro";
     metronome = new Metronome();
     pianoSynth = new PianoSynth();
     midiRecorder = new MidiRecorder();
-    
+
     // Set initial volume to match UI on page load
     setTimeout(() => {
         const volumeSlider = document.getElementById("pianoVolume");
@@ -1758,6 +1758,9 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 "📤 Analyzing recorded MIDI...",
                 "analyzing",
             );
+
+            document.querySelector(".progression-overlay").innerHTML =
+                '<div class="loading-spinner"></div>';
 
             const analysisFormData = new FormData();
             analysisFormData.append(
