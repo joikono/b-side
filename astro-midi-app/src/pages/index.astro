@@ -4,6 +4,7 @@
 const apiBase = "http://localhost:8000";
 import "../styles/global.css";
 import CircularWaveform from "../components/circular_waveform.astro";
+import FrequencyBars from "../components/frequency_bars.astro";
 ---
 
 <html lang="en">
@@ -40,6 +41,14 @@ import CircularWaveform from "../components/circular_waveform.astro";
                 <span id="audioStatusText">Ready</span>
             </div>
         </div>
+
+        <FrequencyBars
+            width="400px"
+            height="60px"
+            barCount={32}
+            autoStart={true}
+            className="voice-bars"
+        />
 
         <!-- Sticky MIDI Control Bar -->
         <div class="midi-control-bar">

@@ -1,0 +1,277 @@
+---
+// src/components/frequency_bars.astro
+export interface Props {
+    width?: string;
+    height?: string;
+    barCount?: number;
+    autoStart?: boolean;
+    className?: string;
+    position?: "fixed" | "relative";
+    bottom?: string;
+    left?: string;
+    transform?: string;
+}
+
+const {
+    width = "400px",
+    height = "60px",
+    barCount = 32,
+    autoStart = true,
+    className = "",
+    position = "fixed",
+    bottom = "68px",
+    left = "50%",
+    transform = "translateX(-50%)",
+} = Astro.props;
+---
+
+<div class={`frequency-bars-container ${className}`}>
+    <canvas class="frequency-canvas"></canvas>
+</div>
+
+<style define:vars={{ width, height, position, bottom, left, transform }}>
+    .frequency-bars-container {
+        position: var(--position);
+        bottom: var(--bottom);
+        left: var(--left);
+        transform: var(--transform);
+        width: var(--width);
+        height: var(--height);
+        z-index: 9999;
+        background: linear-gradient(
+            135deg,
+            rgba(44, 62, 80, 0.9),
+            rgba(52, 73, 94, 0.9)
+        );
+        border: 2px solid #3498db;
+        border-radius: 15px;
+        padding: 8px;
+        backdrop-filter: blur(10px);
+        opacity: 1;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+
+    .frequency-bars-container.active {
+        opacity: 1;
+    }
+
+    .frequency-canvas {
+        width: 100%;
+        height: 100%;
+        border-radius: 8px;
+        display: block;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+        .frequency-bars-container {
+            width: 300px;
+            height: 50px;
+            bottom: 75px;
+        }
+    }
+</style>
+
+<script define:vars={{ barCount, autoStart }}>
+    class FrequencyBars {
+        constructor(container) {
+            this.container = container;
+            this.canvas = container.querySelector(".frequency-canvas");
+            this.ctx = this.canvas.getContext("2d");
+
+            this.audioContext = null;
+            this.analyser = null;
+            this.dataArray = null;
+            this.isActive = false;
+            this.animationId = null;
+
+            this.barCount = barCount;
+            this.init();
+        }
+
+        async init() {
+            this.setupCanvas();
+
+            if (autoStart) {
+                await this.initMicrophone();
+            }
+        }
+
+        setupCanvas() {
+            const rect = this.canvas.getBoundingClientRect();
+            this.canvas.width = rect.width * window.devicePixelRatio;
+            this.canvas.height = rect.height * window.devicePixelRatio;
+            this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        async initMicrophone() {
+            try {
+                if (!this.audioContext) {
+                    this.audioContext = new (window.AudioContext ||
+                        window.webkitAudioContext)();
+                }
+
+                if (this.audioContext.state === "suspended") {
+                    await this.audioContext.resume();
+                }
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    },
+                });
+
+                this.analyser = this.audioContext.createAnalyser();
+                this.analyser.fftSize = 128;
+                this.analyser.smoothingTimeConstant = 0.7;
+                this.analyser.minDecibels = -90;
+                this.analyser.maxDecibels = -10;
+
+                const source =
+                    this.audioContext.createMediaStreamSource(stream);
+                source.connect(this.analyser);
+
+                this.dataArray = new Uint8Array(
+                    this.analyser.frequencyBinCount,
+                );
+                this.isActive = true;
+
+                this.show();
+                this.animate();
+
+                console.log("🎤 Voice frequency bars initialized");
+            } catch (error) {
+                console.error(
+                    "❌ Failed to initialize voice frequency bars:",
+                    error,
+                );
+            }
+        }
+
+        show() {
+            this.container.classList.add("active");
+        }
+
+        hide() {
+            this.container.classList.remove("active");
+        }
+
+        animate() {
+            if (!this.isActive) return;
+
+            this.animationId = requestAnimationFrame(() => this.animate());
+
+            if (this.analyser && this.dataArray) {
+                this.analyser.getByteFrequencyData(this.dataArray);
+                this.draw();
+            }
+        }
+
+        draw() {
+            const rect = this.canvas.getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
+
+            // Clear canvas
+            this.ctx.clearRect(0, 0, width, height);
+
+            const barWidth = width / this.barCount;
+            const maxBarHeight = height - 4;
+
+            for (let i = 0; i < this.barCount; i++) {
+                // Get frequency data (spread across available data)
+                const dataIndex = Math.floor(
+                    (i / this.barCount) * this.dataArray.length,
+                );
+                const value = this.dataArray[dataIndex] || 0;
+
+                // Calculate bar height (with minimum height for visual appeal)
+                const barHeight = Math.max(2, (value / 255) * maxBarHeight);
+
+                // Create gradient color based on frequency and amplitude
+                const hue = (i / this.barCount) * 120 + 200; // Blue to cyan range
+                const saturation = 70 + (value / 255) * 30; // More saturated when louder
+                const lightness = 40 + (value / 255) * 40; // Brighter when louder
+
+                this.ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+
+                // Draw bar from bottom up
+                const x = i * barWidth + 1;
+                const y = height - barHeight - 2;
+
+                this.ctx.fillRect(x, y, barWidth - 2, barHeight);
+
+                // Add glow effect for active bars
+                if (value > 30) {
+                    this.ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                    this.ctx.shadowBlur = 4;
+                    this.ctx.fillRect(x, y, barWidth - 2, barHeight);
+                    this.ctx.shadowBlur = 0;
+                }
+            }
+        }
+
+        stop() {
+            this.isActive = false;
+            if (this.animationId) {
+                cancelAnimationFrame(this.animationId);
+            }
+            this.hide();
+
+            if (this.audioContext) {
+                this.audioContext.close();
+                this.audioContext = null;
+            }
+
+            console.log("🎤 Voice frequency bars stopped");
+        }
+
+        onVoiceActivity() {
+            if (!this.isActive) {
+                this.initMicrophone();
+            }
+        }
+
+        onVoiceInactive() {
+            setTimeout(() => {
+                if (this.isActive) {
+                    this.stop();
+                }
+            }, 3000);
+        }
+    }
+
+    // Initialize when DOM is ready
+    document.addEventListener("DOMContentLoaded", () => {
+        const containers = document.querySelectorAll(
+            ".frequency-bars-container",
+        );
+
+        containers.forEach((container) => {
+            const frequencyBars = new FrequencyBars(container);
+
+            // Store instance for external access
+            container.frequencyBarsInstance = frequencyBars;
+
+            // Make globally accessible
+            if (!window.voiceFrequencyBars) {
+                window.voiceFrequencyBars = frequencyBars;
+            }
+        });
+    });
+
+    // Handle window resize
+    window.addEventListener("resize", () => {
+        const containers = document.querySelectorAll(
+            ".frequency-bars-container",
+        );
+        containers.forEach((container) => {
+            if (container.frequencyBarsInstance) {
+                container.frequencyBarsInstance.setupCanvas();
+            }
+        });
+    });
+</script>
