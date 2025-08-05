@@ -133,8 +133,8 @@ export class VoiceCommands {
         }
 
         if (this.isWakeWordMode && !this.activeSession) {
-            // Wake word detection (unchanged)
-            if (command.includes("hey beside" || "hey b side" || "hey b-side")) {
+            // Wake word detection (fixed)
+            if (command.includes("hey beside") || command.includes("hey b side") || command.includes("hey b-side")) {
                 console.log("👋 Wake word detected!");
 
                 const responses = [
@@ -174,63 +174,42 @@ export class VoiceCommands {
         this.extendActiveSession();
 
         try {
-            const apiKey = import.meta.env.PUBLIC_OPENAI_API_KEY;
-
-            const systemPrompt = `You are a voice command classifier for a music application. 
-        
-        Analyze the user's voice command and return ONLY a JSON response with this structure:
-        {
-            "intent": "record|play|stop|generate|loop|toggle_recording|demo|chat",
-            "confidence": 0.0-1.0,
-            "parameters": {...any additional params...}
-        }
-    
-        Intent definitions:
-        - "record": User wants to start recording MIDI input (examples: "record", "capture", "start recording")
-        - "play": User wants to play/hear music or arrangements (examples: "play", "jam", "hear it", "play it", "can you play", "let me hear", "start playing")
-        - "stop": User wants to stop playback (examples: "stop", "pause", "cancel")
-        - "generate": User wants to create/arrange music (examples: "generate", "arrange", "make music")
-        - "loop": User wants to enable/toggle looping (examples: "loop", "repeat")
-        - "toggle_recording": User wants to include/exclude their recording in playback (examples: "add my recording", "include my recording", "turn on my recording", "play my recording too", "remove my recording", "turn off my recording", "don't play my recording")
-        - "demo": User is starting a demo or presentation (examples: "this is a demo", "we're demoing", "demo mode", "presenting to audience", "show the audience")
-        - "chat": General conversation, questions, or unclear commands
-    
-        Examples:
-        "let's record this" → {"intent": "record", "confidence": 0.9}
-        "play that arrangement" → {"intent": "play", "confidence": 0.9}
-        "add my recording to the mix" → {"intent": "toggle_recording", "confidence": 0.9}
-        "include my recording" → {"intent": "toggle_recording", "confidence": 0.8}
-        "turn off my recording" → {"intent": "toggle_recording", "confidence": 0.9}
-        "play my recording with the arrangement" → {"intent": "toggle_recording", "confidence": 0.8}
-        "this is a demo" → {"intent": "demo", "confidence": 0.9}
-        "we're presenting this" → {"intent": "demo", "confidence": 0.8}
-        "demo mode" → {"intent": "demo", "confidence": 0.9}`;
-
-            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            console.log("🔗 Attempting to connect to backend at http://localhost:8000/api/chat/intent-classification");
+            console.log("📤 Sending command:", command);
+            
+            const response = await fetch("http://localhost:8000/api/chat/intent-classification", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${apiKey}`,
                 },
                 body: JSON.stringify({
-                    model: "gpt-3.5-turbo",
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: command }
-                    ],
-                    max_tokens: 100,
-                    temperature: 0.1,
+                    command: command
                 }),
             });
 
-            const result = await response.json();
-            const aiResponse = result.choices[0].message.content;
+            console.log("📡 Backend response status:", response.status);
 
-            const intentData = JSON.parse(aiResponse);
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("❌ Backend error response:", errorText);
+                throw new Error(`Backend error: ${response.status} - ${errorText}`);
+            }
+
+            const intentData = await response.json();
+            console.log("✅ Intent classification successful:", intentData);
             this.executeIntent(intentData, command);
 
         } catch (error) {
             console.error("❌ Intent classification failed:", error);
+            console.error("🔄 Falling back to conversational mode");
+            
+            // Check if it's a network connectivity issue
+            if (error.message.includes('fetch') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                console.error("🌐 Network error detected - is the backend running at http://localhost:8000?");
+                this.speakSmart("Backend connection failed. Please check if the server is running.", 'quick');
+                return;
+            }
+            
             this.handleConversationalCommand(command);
         }
     }
@@ -453,105 +432,60 @@ export class VoiceCommands {
         console.log("💬 Handling conversational command:", command);
 
         try {
-            const apiKey = import.meta.env.PUBLIC_OPENAI_API_KEY;
-
-            if (!apiKey) {
-                console.error("❌ No OpenAI API key found");
-                this.speakSmart("Sorry, I need an API key to respond to that", 'quick');
-                return;
-            }
-
             // Check if user has recorded anything yet
             const hasCurrentAnalysis = !!window.uploadedMidiResult;
 
-            let contextMessage = "";
+            // Prepare analysis context if available
+            let analysisContext = null;
             if (hasCurrentAnalysis) {
                 const result = window.uploadedMidiResult;
-                if (result.detected_type === "chord_progression") {
-                    const chords = result.chord_progression || [];
-                    contextMessage = `Current analyzed chord progression: ${chords.join(" → ")}. Key: ${result.key || "Unknown"}.`;
-                } else if (result.harmonizations) {
-                    const style = document.getElementById("stickyHarmonyStyle")?.value || "simple_pop";
-                    const chords = result.harmonizations[style]?.progression || [];
-                    contextMessage = `Current melody harmonized as: ${chords.join(" → ")}. Key: ${result.key || "Unknown"}.`;
-                }
+                analysisContext = {
+                    detected_type: result.detected_type,
+                    chord_progression: result.chord_progression,
+                    key: result.key,
+                    harmonizations: result.harmonizations
+                };
             }
 
-            // Different system prompts based on whether they've recorded anything
-            const systemPrompt = hasCurrentAnalysis
-                ? `You're a music co-pilot for songwriters and composers. Keep responses under 30 words since this is voice interaction.
-    
-    The user has already recorded and analyzed their music. For ANY requests about arrangements, instruments, backing tracks, or making music fuller, always suggest they say "generate" to create an arrangement.
-    
-    Your role:
-    - For arrangement requests: Always suggest saying "generate" to create backing instruments
-    - For musical questions: Give specific, actionable advice about their chord progression
-    - For general music chat: Be supportive and knowledgeable
-    - Keep everything concise and natural
-    
-    If they ask about adding instruments, backing tracks, fuller sound, or arrangements, respond like: "Say 'generate' and I'll create backing instruments for your [melody/chords]!"`
+            console.log("💬 Sending to backend - hasRecording:", hasCurrentAnalysis);
+            console.log("🔗 Attempting conversational endpoint at http://localhost:8000/api/chat/conversational");
 
-                : `You're a music co-pilot for songwriters and composers. Keep responses under 30 words since this is voice interaction.
-    
-    The user hasn't recorded anything yet. Your main job is to recognize when they're describing musical goals (especially about arrangements, adding instruments, or making music fuller) and guide them to record first.
-    
-    RECOGNIZE THESE AS ARRANGEMENT INTENTIONS:
-    - "I have a melody and want to see how it sounds with instruments"
-    - "I'd like to add backing to this tune I have"
-    - "How would this sound with more instruments"
-    - "I want to create an arrangement"
-    - "Can we build on this melody"
-    - Any mention of adding instruments, backing tracks, fuller sound, arrangements
-    
-    FOR ARRANGEMENT INTENTIONS: Respond enthusiastically and guide them to record first, like:
-    "That sounds awesome! First, let's capture your melody. Ask me to record you when you're ready to play it, then I'll help add instruments!"
-    
-    FOR OTHER MUSIC QUESTIONS: Be helpful and supportive but concise.
-    
-    Always be encouraging about their musical ideas!`;
-
-            const messages = [
-                { role: "system", content: systemPrompt }
-            ];
-
-            // Add context about current analysis if available
-            if (contextMessage) {
-                messages.push({ role: "system", content: contextMessage });
-            }
-
-            // Add user command
-            messages.push({ role: "user", content: command });
-
-            console.log("💬 Sending to OpenAI - hasRecording:", hasCurrentAnalysis);
-
-            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            const response = await fetch("http://localhost:8000/api/chat/conversational", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${apiKey}`,
                 },
                 body: JSON.stringify({
-                    model: "gpt-3.5-turbo",
-                    messages: messages,
-                    max_tokens: 100,
-                    temperature: 0.7,
+                    command: command,
+                    has_current_analysis: hasCurrentAnalysis,
+                    analysis_context: analysisContext
                 }),
             });
 
-            const result = await response.json();
+            console.log("📡 Conversational response status:", response.status);
 
             if (!response.ok) {
-                throw new Error(`OpenAI API error: ${response.status} - ${result.error?.message || "Unknown error"}`);
+                const errorText = await response.text();
+                console.error("❌ Conversational backend error:", errorText);
+                throw new Error(`Backend error: ${response.status} - ${errorText}`);
             }
 
-            const aiResponse = result.choices[0].message.content;
+            const result = await response.json();
+            const aiResponse = result.response;
             console.log("💬 AI response:", aiResponse);
 
             // Use Google TTS for conversational responses
             this.speakWithGoogle(aiResponse, 'conversational');
 
         } catch (error) {
-            console.error("❌ OpenAI request failed:", error);
+            console.error("❌ Backend request failed:", error);
+
+            // Check if it's a network connectivity issue
+            if (error.message.includes('fetch') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                console.error("🌐 Network error in conversational mode - is the backend running?");
+                this.speakSmart("I can't connect to my brain right now. Please check if the backend server is running.", 'quick');
+                return;
+            }
 
             // Smart fallback for arrangement intentions when AI fails
             const lowerCommand = command.toLowerCase();

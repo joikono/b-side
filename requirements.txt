@@ -1,9 +1,12 @@
 # !!!!!!!! UNTESTED !!!!!!!!!!!!
 
 # FastAPI and server
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+fastapi==0.70.0  # Compatible with Python 3.7
+uvicorn[standard]==0.13.4  # Compatible with Python 3.7
 python-multipart==0.0.6  # For file uploads
+requests==2.27.1  # For HTTP requests to OpenAI API (Python 3.7 compatible)
+urllib3==1.26.18  # Compatible with OpenSSL 1.1.0h and Python 3.7
+python-dotenv==0.19.2  # For loading environment variables (Python 3.7 compatible)
 
 # Core ML/Audio packages (pinned to working versions)
 numpy==1.21.6
