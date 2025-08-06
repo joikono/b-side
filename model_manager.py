@@ -29,10 +29,10 @@ class MagentaModelManager:
     def initialize_models(self):
         """Load and initialize Magenta models once."""
         if self._models_loaded:
-            print("✅ Models already loaded!")
+            print("Models already loaded!")
             return
         
-        print("🔄 Loading Magenta models...")
+        print("Loading Magenta models...")
         
         # Check if model files exist
         bass_bundle_path = 'basic_rnn.mag'
@@ -58,16 +58,16 @@ class MagentaModelManager:
             self._drum_rnn = drum_map['drum_kit'](checkpoint=None, bundle=drum_bundle)
             
             # Initialize models (this is the slow part)
-            print("🧠 Initializing bass model...")
+            print("Initializing bass model...")
             self._bass_rnn.initialize()
-            print("🥁 Initializing drum model...")
+            print("Initializing drum model...")
             self._drum_rnn.initialize()
             
             self._models_loaded = True
-            print("✅ All Magenta models loaded successfully!")
+            print("All Magenta models loaded successfully!")
             
         except Exception as e:
-            print(f"❌ Error loading models: {e}")
+            print(f"Error loading models: {e}")
             raise
     
     @property

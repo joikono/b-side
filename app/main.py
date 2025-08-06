@@ -97,10 +97,10 @@ async def startup_event():
         # Load ML models
         await model_service.load_models()
         
-        logger.info("🚀 Application startup complete!")
+        logger.info("Application startup complete!")
         
     except Exception as e:
-        logger.error(f"❌ Startup failed: {e}")
+        logger.error(f"Startup failed: {e}")
         raise e
 
 
@@ -251,9 +251,9 @@ async def handle_conversational_chat(request: ChatCompletionRequest):
 
 def run_app():
     """Run the application."""
-    logger.info(f"🚀 Starting {settings.app_name}...")
-    logger.info("📚 API docs available at: http://localhost:8000/docs")
-    logger.info("🎹 Ready for frontend-recorded MIDI files with GUARANTEED 8 chords!")
+    logger.info(f"Starting {settings.app_name}...")
+    logger.info("API docs available at: http://localhost:8000/docs")
+    logger.info("Ready for frontend-recorded MIDI files with GUARANTEED 8 chords!")
     
     uvicorn.run(
         "app.main:app",
