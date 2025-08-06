@@ -1,79 +1,69 @@
-# MIDI Analysis API
+# B-Side
+A music composition co-pilot designed to assist musicians and music learners to materialize their ideas. Offering FastAPI-based MIDI analysis, an arrangement generation system and creative assistance with voice integration and frontend support.
 
-A modern FastAPI-based MIDI analysis and arrangement generation system with voice integration and frontend support.
+**[Project Portfolio](https://www.johnoikonomou.com/b-side)** | **[Thesis Documentation](https://www.johnoikonomou.com/_files/ugd/d49114_6c851729d85e4f3cb2272b7ad23db074.pdf)**
 
-## 🚀 Quick Start
+## Quick Start
 
-1. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+# Create and activate virtual environment
+python -m venv midi-venv
+midi-venv\Scripts\activate
 
-2. **Configure Environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your OpenAI API key for voice features
-   ```
+# Install Python dependencies
+pip install -r requirements.txt
 
-3. **Run the Application**
-   ```bash
-   python main.py
-   ```
+# Run backend (OpenAI API key detected from system environment)
+python main.py
 
-4. **Access the API**
-   - API Server: http://localhost:8000
-   - Interactive Documentation: http://localhost:8000/docs
-   - Frontend: Open `astro-midi-app/` directory
+# Run frontend (in separate terminal)
+cd astro-midi-app
+npm install
+npm run dev
+```
 
-## 📁 Project Structure
+**Access Points:**
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- Frontend: http://localhost:4321
+
+## Core Features
+
+- **Smart MIDI Analysis** - Automatic chord progression and melody detection
+- **AI Arrangement Generation** - Create backing tracks with bass and drums
+- **Voice Commands** - Natural language interaction for musical tasks  
+- **8-Chord Harmonization** - Consistent harmonic analysis system
+- **Real-time Visualization** - Interactive chord and melody displays
+
+## Technology Stack
+
+- **Backend**: FastAPI + Python
+- **AI Models**: Magenta, OpenAI, Web Speech API
+- **Frontend**: Astro + JavaScript
+- **MIDI Processing**: mido, miditoolkit, pretty-midi, note-seq
+
+## Project Structure
 
 ```
-├── app/                    # Refactored FastAPI application
-│   ├── config.py          # Configuration settings
-│   ├── main.py            # FastAPI app and routes
-│   ├── core/              # Core services and utilities
-│   ├── models/            # Pydantic schemas
-│   ├── services/          # Business logic services
-│   └── utils/             # Helper functions
-├── astro-midi-app/        # Frontend application
 ├── main.py                # Application entry point
-├── requirements.txt       # Python dependencies
-└── .env.example          # Environment configuration template
+├── app/                   # FastAPI application core
+│   ├── config.py         # Configuration settings
+│   ├── core/             # Business logic and services
+│   └── models/           # Pydantic schemas
+├── astro-midi-app/       # Frontend application
+├── requirements.txt      # Python dependencies
+└── README.md
 ```
 
-## 🎵 Features
+## Available Magenta Models
+- Melody RNN (basic_rnn, mono_rnn, lookback_rnn, attention_rnn)
+- Improv RNN (basic_improv, attention_improv, chord_pitches_improv)  
+- Drums RNN (one_drum, drum_kit)
 
-- **MIDI Analysis**: Automatic chord progression and melody detection
-- **8-Chord Harmonization**: Forced 8-chord analysis for consistent results
-- **Arrangement Generation**: AI-powered backing track creation
-- **Voice Commands**: OpenAI-powered intent classification
-- **Visualization**: Real-time chord and melody visualization
-- **File Processing**: MIDI duration fixing and optimization
+## License
 
-## 🤖 AI Integration
+This project uses Google Magenta (Apache 2.0 License) and OpenAI API services.
 
-- **OpenAI Whisper**: Voice transcription (configurable)
-- **OpenAI GPT**: Intent classification and conversational AI
-- **Magenta**: MIDI arrangement generation (when available)
-
-## 🔧 Development
-
-The application runs in mock mode when Magenta dependencies are not available, allowing for development and testing of the API structure.
-
-
-
-AVAILABLE MODELS:
-✅ melody_rnn_sequence_generator - Available
-🎵 Available melody models: ['basic_rnn', 'mono_rnn', 'lookback_rnn', 'attention_rnn']
-
-==================================================
-✅ improv_rnn_sequence_generator - Available
-🎸 Available improv models: ['basic_improv', 'attention_improv', 'chord_pitches_improv']
-
-==================================================
-✅ drums_rnn_sequence_generator - Available
-🥁 Available drum models: ['one_drum', 'drum_kit']
-
-==================================================
-🔍 Checking what Magenta models are installed...
-📁 Available model directories: ['arbitrary_image_stylization', 'coconet', 'drums_rnn', 'gansynth', 'image_stylization', 'improv_rnn', 'latent_transfer', 'melody_rnn', 'music_vae', 'nsynth', 'onsets_frames_transcription', 'performance_rnn', 'pianoroll_rnn_nade', 'piano_genie', 'polyphony_rnn', 'rl_tuner', 'score2perf', 'shared', 'sketch_rnn', 'svg_vae', '__pycache__']
+```
+├── main.py                # Application entry point
+├── app/                   # Fast
