@@ -1,32 +1,64 @@
-pip install -r requirements.txt
+# MIDI Analysis API
 
-todo: 
-1. tidy up backend 
-2. incorporate Vosk
-3. make the stop button stop when counting in
-4. add your recording
+A modern FastAPI-based MIDI analysis and arrangement generation system with voice integration and frontend support.
 
-python.analysis.typeCheckingMode
+## 🚀 Quick Start
 
-Phase 1: Continue with Astro (Short Term)
+1. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Perfect your UI/UX and workflow
-Add Whisper + ElevenLabs to your Python backend
-Get the functionality solid
+2. **Configure Environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your OpenAI API key for voice features
+   ```
 
-Phase 2: Migrate to Tauri (Medium Term)
+3. **Run the Application**
+   ```bash
+   python main.py
+   ```
 
-Port your Astro frontend to vanilla HTML/CSS/JS
-Keep your Python backend for MIDI + AI processing
-Package as lightweight desktop app
+4. **Access the API**
+   - API Server: http://localhost:8000
+   - Interactive Documentation: http://localhost:8000/docs
+   - Frontend: Open `astro-midi-app/` directory
 
-🧠 AI Integration Considerations:
-Whisper + ElevenLabs work beautifully with Python:
+## 📁 Project Structure
 
-OpenAI Python SDK for Whisper
-ElevenLabs Python SDK
-Your existing Python MIDI code
-All in one cohesive backend
+```
+├── app/                    # Refactored FastAPI application
+│   ├── config.py          # Configuration settings
+│   ├── main.py            # FastAPI app and routes
+│   ├── core/              # Core services and utilities
+│   ├── models/            # Pydantic schemas
+│   ├── services/          # Business logic services
+│   └── utils/             # Helper functions
+├── astro-midi-app/        # Frontend application
+├── main.py                # Application entry point
+├── requirements.txt       # Python dependencies
+└── .env.example          # Environment configuration template
+```
+
+## 🎵 Features
+
+- **MIDI Analysis**: Automatic chord progression and melody detection
+- **8-Chord Harmonization**: Forced 8-chord analysis for consistent results
+- **Arrangement Generation**: AI-powered backing track creation
+- **Voice Commands**: OpenAI-powered intent classification
+- **Visualization**: Real-time chord and melody visualization
+- **File Processing**: MIDI duration fixing and optimization
+
+## 🤖 AI Integration
+
+- **OpenAI Whisper**: Voice transcription (configurable)
+- **OpenAI GPT**: Intent classification and conversational AI
+- **Magenta**: MIDI arrangement generation (when available)
+
+## 🔧 Development
+
+The application runs in mock mode when Magenta dependencies are not available, allowing for development and testing of the API structure.
 
 
 

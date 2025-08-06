@@ -3,7 +3,10 @@
     "allow": [
       "Bash(pip install:*)",
       "Bash(python:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(timeout:*)",
+      "Bash(mv:*)",
+      "Bash(flake8:*)"
     ],
     "deny": []
   }

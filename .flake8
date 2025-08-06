@@ -1,0 +1,15 @@
+[flake8]
+max-line-length = 120
+ignore = E501, W503, W293, W292, E402
+exclude = 
+    __pycache__,
+    .git,
+    .venv,
+    midi-venv,
+    astro-midi-app,
+    generated_visualizations
+per-file-ignores =
+    app/services/*:F401,F811
+    app/core/model_manager.py:F401,F811
+count = True
+show-source = True
